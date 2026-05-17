@@ -8,6 +8,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "tsx watch --env-file .env.local ./src/index.ts",
     "deploy-commands": "tsx --env-file .env.local deploy-commands.ts",
+    "clear-global-commands": "tsx --env-file .env.local clear-global-commands.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },

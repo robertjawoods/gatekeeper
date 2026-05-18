@@ -56,6 +56,7 @@ export default {
 
         try {
             const trials = await listTrials(context.prisma, guildId, activeOnly);
+            const logoUrl = context.client.user?.displayAvatarURL({ extension: 'png', size: 256 });
             const items: TrialListItem[] = await Promise.all(trials.map(async trial => {
                 const status = trial.active ? 'Active' : trial.passed ? 'Passed' : 'Failed';
                 const displayName = await resolveGuildDisplayName(context.client, guildId, trial.userId, trial.userId);
@@ -66,7 +67,7 @@ export default {
                 };
             }));
 
-            const embeds = buildTrialListEmbeds(items, activeOnly).map(embed => embed.toJSON());
+            const embeds = buildTrialListEmbeds(items, activeOnly, logoUrl).map(embed => embed.toJSON());
 
             const sendResult = await sendOfficerChannelMessage(context.client, settings.officerChannelId, { embeds });
 

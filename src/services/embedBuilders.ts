@@ -36,6 +36,14 @@ export type RoleDebugEmbedInput = {
     configuredRaiderRoleMissingId?: string;
 };
 
+function applyGatekeeperLogo(embed: EmbedBuilder, logoUrl?: string): EmbedBuilder {
+    if (logoUrl) {
+        embed.setThumbnail(logoUrl);
+    }
+
+    return embed;
+}
+
 function chunkItems<T>(items: T[], size: number): T[][] {
     const chunks: T[][] = [];
 
@@ -69,15 +77,16 @@ function truncate(value: string, maxLength: number): string {
     return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
 }
 
-export function buildTrialListEmbeds(items: TrialListItem[], activeOnly: boolean): EmbedBuilder[] {
+export function buildTrialListEmbeds(items: TrialListItem[], activeOnly: boolean, logoUrl?: string): EmbedBuilder[] {
     if (items.length === 0) {
-        return [
+        return [applyGatekeeperLogo(
             new EmbedBuilder()
                 .setColor(COLORS.info)
                 .setTitle(activeOnly ? 'Active Trials' : 'All Trials')
                 .setDescription('No trials found for this server.')
                 .setTimestamp(new Date()),
-        ];
+            logoUrl,
+        )];
     }
 
     const chunks = chunkItems(items, MAX_TRIALS_PER_EMBED);
@@ -98,29 +107,36 @@ export function buildTrialListEmbeds(items: TrialListItem[], activeOnly: boolean
             });
         });
 
-        return embed;
+        return applyGatekeeperLogo(embed, logoUrl);
     });
 }
 
 export function buildFeedbackSummaryEmbed(
     displayName: string,
     result: MemberFeedbackSummaryResult,
+    logoUrl?: string,
 ): EmbedBuilder {
     if (result.outcome === 'no_active_trial') {
-        return new EmbedBuilder()
-            .setColor(COLORS.warning)
-            .setTitle('Trial Feedback Summary')
-            .setDescription(`No active trial found for **${displayName}**.`)
-            .setTimestamp(new Date());
+        return applyGatekeeperLogo(
+            new EmbedBuilder()
+                .setColor(COLORS.warning)
+                .setTitle('Trial Feedback Summary')
+                .setDescription(`No active trial found for **${displayName}**.`)
+                .setTimestamp(new Date()),
+            logoUrl,
+        );
     }
 
     if (result.outcome === 'no_feedback') {
-        return new EmbedBuilder()
-            .setColor(COLORS.warning)
-            .setTitle('Trial Feedback Summary')
-            .setDescription(`An active trial exists for **${displayName}**, but no feedback has been submitted yet.`)
-            .setFooter({ text: `Trial ID: ${result.trialId}` })
-            .setTimestamp(new Date());
+        return applyGatekeeperLogo(
+            new EmbedBuilder()
+                .setColor(COLORS.warning)
+                .setTitle('Trial Feedback Summary')
+                .setDescription(`An active trial exists for **${displayName}**, but no feedback has been submitted yet.`)
+                .setFooter({ text: `Trial ID: ${result.trialId}` })
+                .setTimestamp(new Date()),
+            logoUrl,
+        );
     }
 
     const comments = result.summary.recentComments.length === 0
@@ -129,24 +145,27 @@ export function buildFeedbackSummaryEmbed(
             .map((comment, index) => `${index + 1}. ${truncate(comment, 280)}`)
             .join('\n');
 
-    return new EmbedBuilder()
-        .setColor(COLORS.success)
-        .setTitle('Trial Feedback Summary')
-        .setDescription(`Member: **${displayName}**`)
-        .addFields(
-            { name: 'Feedback Entries', value: String(result.summary.feedbackCount), inline: true },
-            { name: 'Late Marks', value: String(result.summary.lateCount), inline: true },
-            { name: 'Performance', value: `${result.summary.averages.performance}/5`, inline: true },
-            { name: 'Attitude', value: `${result.summary.averages.attitude}/5`, inline: true },
-            { name: 'Focus', value: `${result.summary.averages.focus}/5`, inline: true },
-            { name: 'Recent Comments', value: comments, inline: false },
-        )
-        .setFooter({ text: `Trial ID: ${result.summary.trialId}` })
-        .setTimestamp(new Date());
+    return applyGatekeeperLogo(
+        new EmbedBuilder()
+            .setColor(COLORS.success)
+            .setTitle('Trial Feedback Summary')
+            .setDescription(`Member: **${displayName}**`)
+            .addFields(
+                { name: 'Feedback Entries', value: String(result.summary.feedbackCount), inline: true },
+                { name: 'Late Marks', value: String(result.summary.lateCount), inline: true },
+                { name: 'Performance', value: `${result.summary.averages.performance}/5`, inline: true },
+                { name: 'Attitude', value: `${result.summary.averages.attitude}/5`, inline: true },
+                { name: 'Focus', value: `${result.summary.averages.focus}/5`, inline: true },
+                { name: 'Recent Comments', value: comments, inline: false },
+            )
+            .setFooter({ text: `Trial ID: ${result.summary.trialId}` })
+            .setTimestamp(new Date()),
+        logoUrl,
+    );
 }
 
-export function buildRoleDebugEmbed(input: RoleDebugEmbedInput): EmbedBuilder {
-    const embed = new EmbedBuilder()
+export function buildRoleDebugEmbed(input: RoleDebugEmbedInput, logoUrl?: string): EmbedBuilder {
+    const embed = applyGatekeeperLogo(new EmbedBuilder()
         .setColor(COLORS.debug)
         .setTitle('Role Debug')
         .addFields(
@@ -154,7 +173,7 @@ export function buildRoleDebugEmbed(input: RoleDebugEmbedInput): EmbedBuilder {
             { name: 'Bot Highest Role Position', value: String(input.botHighestRolePosition), inline: true },
             { name: 'Managed Roles In Guild', value: String(input.managedRoleCount), inline: true },
         )
-        .setTimestamp(new Date());
+        .setTimestamp(new Date()), logoUrl);
 
     if (input.inspectedRole) {
         embed.addFields({

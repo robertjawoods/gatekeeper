@@ -57,7 +57,8 @@ export default {
         try {
             const displayName = await resolveGuildDisplayName(context.client, guildId, member.id, member.displayName);
             const result = await getMemberFeedbackSummary(context.prisma, guildId, member.id);
-            const embed = buildFeedbackSummaryEmbed(displayName, result);
+            const logoUrl = context.client.user.displayAvatarURL({ extension: 'png', size: 256 });
+            const embed = buildFeedbackSummaryEmbed(displayName, result, logoUrl);
 
             const sendResult = await sendOfficerChannelMessage(context.client, settings.officerChannelId, {
                 embeds: [embed.toJSON()],

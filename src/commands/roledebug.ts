@@ -61,6 +61,7 @@ export default {
 
         const botHighestRolePosition = getBotHighestRolePosition(interaction);
         const managedRoleCount = guild.roles.cache.filter(role => role.managed).size;
+        const logoUrl = context.client.user.displayAvatarURL({ extension: 'png', size: 256 });
 
         if (roleToInspect) {
             const embed = buildRoleDebugEmbed({
@@ -68,7 +69,7 @@ export default {
                 botHighestRolePosition,
                 managedRoleCount,
                 inspectedRole: toRoleSnapshot(roleToInspect, botHighestRolePosition),
-            });
+            }, logoUrl);
 
             await interaction.reply({
                 embeds: [embed],
@@ -107,7 +108,7 @@ export default {
             embedInput.configuredRaiderRoleMissingId = settings.raiderRoleId;
         }
 
-        const embed = buildRoleDebugEmbed(embedInput);
+        const embed = buildRoleDebugEmbed(embedInput, logoUrl);
 
         await interaction.reply({
             embeds: [embed],

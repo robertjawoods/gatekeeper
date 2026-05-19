@@ -1,6 +1,6 @@
 import type { PrismaClient, Settings } from '../generated/prisma/client.js';
 import type { DiscordClient } from '../DiscordClient.js';
-import type { APIEmbed } from 'discord.js';
+import type { MessageCreateOptions } from 'discord.js';
 import cron from 'node-cron';
 
 export class GuildSettingsMissingError extends Error {
@@ -107,15 +107,12 @@ export function validateRaidReminderSettings(
 }
 
 export type OfficerChannelMessageResult =
-    | { delivered: true }
+    | { delivered: true; messageId: string }
     | { delivered: false; reason: 'channel_not_found' | 'channel_not_text_based' | 'send_failed' };
 
 export type OfficerChannelMessagePayload =
     | string
-    | {
-        content?: string;
-        embeds?: APIEmbed[];
-    };
+    | Pick<MessageCreateOptions, 'content' | 'embeds' | 'components'>;
 
 export async function sendOfficerChannelMessage(
     client: DiscordClient,
@@ -133,13 +130,17 @@ export async function sendOfficerChannelMessage(
     }
 
     try {
+        let messageId: string;
+
         if (typeof payload === 'string') {
-            await channel.send({ content: payload });
+            const message = await channel.send({ content: payload });
+            messageId = message.id;
         } else {
-            await channel.send(payload);
+            const message = await channel.send(payload);
+            messageId = message.id;
         }
 
-        return { delivered: true };
+        return { delivered: true, messageId };
     } catch {
         return { delivered: false, reason: 'send_failed' };
     }

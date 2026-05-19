@@ -22,11 +22,53 @@ model Trial {
   startedById String
   feedbacks Feedback[]
   attendanceReminderLogs AttendanceReminderLog[]
+  votePolls TrialVotePoll[]
 
   @@unique([guildId, userId, active])
   @@index([guildId])
   @@index([guildId, active])
   @@index([guildId, userId])
+}
+
+enum TrialVoteOption {
+  PASS
+  FAIL
+  EXTEND
+}
+
+model TrialVotePoll {
+  id          Int         @id @default(autoincrement())
+  guildId     String
+  trialId     Int
+  targetId    String
+  createdById String
+  messageId   String?     @unique
+  open        Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  trial Trial @relation(fields: [trialId], references: [id], onDelete: Cascade)
+  votes TrialVote[]
+
+  @@index([guildId])
+  @@index([guildId, trialId])
+  @@index([guildId, open])
+}
+
+model TrialVote {
+  id        Int             @id @default(autoincrement())
+  guildId   String
+  pollId    Int
+  officerId String
+  option    TrialVoteOption
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  poll TrialVotePoll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, officerId])
+  @@index([guildId])
+  @@index([guildId, pollId])
 }
 
 model Feedback {
@@ -41,6 +83,7 @@ model Feedback {
   comments    String?
   raidAttendanceDate String?
   createdAt   DateTime @default(now())
+  isActive    Boolean @default(true)
 
   trial Trial @relation(fields: [trialId], references: [id], onDelete: Cascade)
 

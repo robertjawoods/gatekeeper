@@ -3,11 +3,14 @@ import {
     type Interaction,
     type ModalSubmitInteraction,
     type ChatInputCommandInteraction,
+    type ButtonInteraction,
 } from 'discord.js';
 import type { AppContext } from '../types.js';
 import { createFeedback, parseFeedbackModalCustomId } from '../services/feedbackService.js';
-import { saveGuildSettings, validateRaidReminderSettings } from '../services/guildSettings.js';
+import { resolveGuildDisplayName, saveGuildSettings, validateRaidReminderSettings } from '../services/guildSettings.js';
+import { buildTrialVotePollEmbed } from '../services/embedBuilders.js';
 import { refreshGuildRaidReminderSchedule } from '../services/raidReminderScheduler.js';
+import { buildTrialVoteButtons, isVoteCustomId, parseVoteCustomId, recordTrialVote } from '../services/voteService.js';
 
 async function handleSettingsModal(interaction: ModalSubmitInteraction, context: AppContext): Promise<void> {
     const officerChannelId = interaction.fields.getSelectedChannels('officerChannelId')?.first()?.id;
@@ -116,10 +119,93 @@ async function handleChatCommand(interaction: ChatInputCommandInteraction, conte
     }
 }
 
+async function handleVoteButton(interaction: ButtonInteraction, context: AppContext): Promise<boolean> {
+    if (!isVoteCustomId(interaction.customId)) {
+        return false;
+    }
+
+    const voteContext = parseVoteCustomId(interaction.customId);
+    if (!voteContext) {
+        await interaction.reply({ content: 'Vote context is invalid. Please create a new poll with `/vote`.', flags: ['Ephemeral'] });
+        return true;
+    }
+
+    if (!interaction.guildId) {
+        await interaction.reply({ content: 'Guild context is missing.', flags: ['Ephemeral'] });
+        return true;
+    }
+
+    await interaction.deferReply({ flags: ['Ephemeral'] });
+
+    const result = await recordTrialVote(context.prisma, {
+        guildId: interaction.guildId,
+        pollId: voteContext.pollId,
+        officerId: interaction.user.id,
+        option: voteContext.option,
+        sourceMessageId: interaction.message.id,
+    });
+
+    if (!result.recorded) {
+        const content = result.reason === 'poll_not_found'
+            ? 'This poll no longer exists. Please create a new one with `/vote`.'
+            : result.reason === 'wrong_guild'
+                ? 'This poll belongs to another server and cannot be used here.'
+                : result.reason === 'poll_closed'
+                    ? 'This poll is closed.'
+                    : 'This button no longer matches the active poll message. Please create a new poll with `/vote`.';
+
+        await interaction.editReply({ content });
+        return true;
+    }
+
+    const logoUrl = context.client.user?.displayAvatarURL({ extension: 'png', size: 256 });
+    const targetDisplayName = await resolveGuildDisplayName(
+        context.client,
+        interaction.guildId,
+        result.poll.targetId,
+        result.poll.targetId,
+    );
+
+    const embed = buildTrialVotePollEmbed({
+        targetDisplayName,
+        targetId: result.poll.targetId,
+        trialId: result.poll.trialId,
+        pollId: result.poll.pollId,
+        open: result.poll.open,
+        passVotes: result.poll.passVotes,
+        failVotes: result.poll.failVotes,
+        extendVotes: result.poll.extendVotes,
+        totalVotes: result.poll.totalVotes,
+    }, logoUrl);
+
+    try {
+        await interaction.message.edit({
+            embeds: [embed],
+            components: buildTrialVoteButtons(result.poll.pollId, !result.poll.open),
+        });
+    } catch (error) {
+        console.error('Failed to refresh vote poll message:', error);
+        await interaction.editReply({
+            content: 'Your vote was recorded, but I could not refresh the poll message.',
+        });
+        return true;
+    }
+
+    await interaction.editReply({ content: 'Your vote has been recorded.' });
+    return true;
+}
+
 
 export default {
     name: Events.InteractionCreate,
     async execute(interaction: Interaction, context: AppContext) {
+        if (interaction.isButton()) {
+            const handled = await handleVoteButton(interaction, context);
+            if (handled) {
+                return;
+            }
+        }
+
         if (interaction.isModalSubmit()) {
             if (interaction.customId === 'settingsModal') {
                 await handleSettingsModal(interaction, context);

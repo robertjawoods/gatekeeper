@@ -44,6 +44,18 @@ export type RaidAttendanceReminderEmbedInput = {
     threshold: number;
 };
 
+export type TrialVotePollEmbedInput = {
+    targetDisplayName: string;
+    targetId: string;
+    trialId: number;
+    pollId: number;
+    open: boolean;
+    passVotes: number;
+    failVotes: number;
+    extendVotes: number;
+    totalVotes: number;
+};
+
 function applyGatekeeperLogo(embed: EmbedBuilder, logoUrl?: string): EmbedBuilder {
     if (logoUrl) {
         embed.setThumbnail(logoUrl);
@@ -250,6 +262,27 @@ export function buildRaidAttendanceReminderEmbed(
                 { name: 'Threshold', value: String(input.threshold), inline: true },
                 { name: 'Trial ID', value: String(input.trialId), inline: false },
             )
+            .setTimestamp(new Date()),
+        logoUrl,
+    );
+}
+
+export function buildTrialVotePollEmbed(input: TrialVotePollEmbedInput, logoUrl?: string): EmbedBuilder {
+    return applyGatekeeperLogo(
+        new EmbedBuilder()
+            .setColor(input.open ? COLORS.info : COLORS.warning)
+            .setTitle('Trial Vote Poll')
+            .setDescription(`Vote for **${input.targetDisplayName}** (<@${input.targetId}>).`)
+            .addFields(
+                { name: 'Trial ID', value: String(input.trialId), inline: true },
+                { name: 'Poll ID', value: String(input.pollId), inline: true },
+                { name: 'Status', value: input.open ? 'Open' : 'Closed', inline: true },
+                { name: 'Pass', value: String(input.passVotes), inline: true },
+                { name: 'Fail', value: String(input.failVotes), inline: true },
+                { name: 'Extend', value: String(input.extendVotes), inline: true },
+                { name: 'Total Votes', value: String(input.totalVotes), inline: false },
+            )
+            .setFooter({ text: 'Use the buttons below to cast or update your vote.' })
             .setTimestamp(new Date()),
         logoUrl,
     );

@@ -1,21 +1,21 @@
-import pino from 'pino';
+import pino from "pino";
 
-const isDev = process.env.NODE_ENV !== 'production';
+const isDev = process.env.NODE_ENV !== "production";
 
 export const logger = pino(
-    {
-        level: process.env.LOG_LEVEL ?? 'info',
-    },
-    isDev
-        ? pino.transport({
-              target: 'pino-pretty',
-              options: {
-                  colorize: true,
-                  translateTime: 'SYS:HH:MM:ss',
-                  ignore: 'pid,hostname',
-              },
-          })
-        : undefined,
+	{
+		level: process.env.LOG_LEVEL ?? "info",
+	},
+	isDev
+		? pino.transport({
+				target: "pino-pretty",
+				options: {
+					colorize: true,
+					translateTime: "SYS:HH:MM:ss",
+					ignore: "pid,hostname",
+				},
+			})
+		: undefined,
 );
 
 /**
@@ -23,7 +23,7 @@ export const logger = pino(
  * All logs emitted from the returned logger will include `guildId`.
  */
 export function createGuildLogger(guildId: string) {
-    return logger.child({ guildId });
+	return logger.child({ guildId });
 }
 
 /**
@@ -35,10 +35,13 @@ export function createGuildLogger(guildId: string) {
  * @param details - Any additional structured context
  */
 export function audit(
-    guildId: string,
-    action: string,
-    actorId: string,
-    details?: Record<string, unknown>,
+	guildId: string,
+	action: string,
+	actorId: string,
+	details?: Record<string, unknown>,
 ) {
-    logger.info({ audit: true, guildId, action, actorId, ...details }, `[AUDIT] ${action}`);
+	logger.info(
+		{ audit: true, guildId, action, actorId, ...details },
+		`[AUDIT] ${action}`,
+	);
 }

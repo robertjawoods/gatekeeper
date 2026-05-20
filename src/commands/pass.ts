@@ -1,193 +1,277 @@
-import { SlashCommandBuilder, type ChatInputCommandInteraction } from 'discord.js';
-import type { AppContext } from '../types.js';
-import { GuildSettingsMissingError, getGuildSettings, resolveGuildDisplayName, sendOfficerChannelMessage } from '../services/guildSettings.js';
-import { buildTrialResolvedEmbed } from '../services/embedBuilders.js';
-import { projectTrialExpectedEndDate, resolveTrial } from '../services/trialService.js';
-import { createGuildLogger, audit } from '../services/logger.js';
-import { buildTrialVoteButtons, closeTrialVotePoll } from '../services/voteService.js';
+import {
+	type ChatInputCommandInteraction,
+	SlashCommandBuilder,
+} from "discord.js";
+import { buildTrialResolvedEmbed } from "../services/embedBuilders.js";
+import {
+	GuildSettingsMissingError,
+	getGuildSettings,
+	resolveGuildDisplayName,
+	sendOfficerChannelMessage,
+} from "../services/guildSettings.js";
+import { audit, createGuildLogger } from "../services/logger.js";
+import {
+	projectTrialExpectedEndDate,
+	resolveTrial,
+} from "../services/trialService.js";
+import {
+	buildTrialVoteButtons,
+	closeTrialVotePoll,
+} from "../services/voteService.js";
+import type { AppContext } from "../types.js";
 
 async function getValidatedTarget(interaction: ChatInputCommandInteraction) {
-    const target = interaction.options.getUser('target');
-    if (!target) {
-        await interaction.reply({
-            content: 'Target user is required.',
-            ephemeral: true,
-        });
-        return null;
-    }
+	const target = interaction.options.getUser("target");
+	if (!target) {
+		await interaction.reply({
+			content: "Target user is required.",
+			flags: ["Ephemeral"],
+		});
+		return null;
+	}
 
-    return target;
+	return target;
 }
 
-async function getValidatedGuildContext(interaction: ChatInputCommandInteraction) {
-    const guild = interaction.guild;
-    const guildId = interaction.guildId;
+async function getValidatedGuildContext(
+	interaction: ChatInputCommandInteraction,
+) {
+	const guild = interaction.guild;
+	const guildId = interaction.guildId;
 
-    if (!guild || !guildId) {
-        await interaction.reply({
-            content: 'This command can only be used in a server.',
-            ephemeral: true,
-        });
-        return null;
-    }
+	if (!guild || !guildId) {
+		await interaction.reply({
+			content: "This command can only be used in a server.",
+			flags: ["Ephemeral"],
+		});
+		return null;
+	}
 
-    return { guild, guildId };
+	return { guild, guildId };
 }
 
-async function getSettingsOrReply(interaction: ChatInputCommandInteraction, context: AppContext, guildId: string) {
-    try {
-        return await getGuildSettings(context.prisma, guildId);
-    } catch (error) {
-        if (error instanceof GuildSettingsMissingError) {
-            await interaction.reply({
-                content: 'Server settings have not been configured yet. Run `/settings` first.',
-                ephemeral: true,
-            });
-            return null;
-        }
+async function getSettingsOrReply(
+	interaction: ChatInputCommandInteraction,
+	context: AppContext,
+	guildId: string,
+) {
+	try {
+		return await getGuildSettings(context.prisma, guildId);
+	} catch (error) {
+		if (error instanceof GuildSettingsMissingError) {
+			await interaction.reply({
+				content:
+					"Server settings have not been configured yet. Run `/settings` first.",
+				flags: ["Ephemeral"],
+			});
+			return null;
+		}
 
-        createGuildLogger(guildId).error({ err: error }, 'Error retrieving guild settings.');
-        await interaction.reply({
-            content: 'An error occurred while retrieving server settings. Please try again later.',
-            ephemeral: true,
-        });
-        return null;
-    }
+		createGuildLogger(guildId).error(
+			{ err: error },
+			"Error retrieving guild settings.",
+		);
+		await interaction.reply({
+			content:
+				"An error occurred while retrieving server settings. Please try again later.",
+			flags: ["Ephemeral"],
+		});
+		return null;
+	}
 }
 
 async function updateRolesOrReply(
-    interaction: ChatInputCommandInteraction,
-    guild: NonNullable<ChatInputCommandInteraction['guild']>,
-    userId: string,
-    trialRoleId: string,
-    raiderRoleId: string,
+	interaction: ChatInputCommandInteraction,
+	guild: NonNullable<ChatInputCommandInteraction["guild"]>,
+	userId: string,
+	trialRoleId: string,
+	raiderRoleId: string,
 ) {
-    try {
-        const member = await guild.members.fetch(userId);
-        await member.roles.remove(trialRoleId);
-        await member.roles.add(raiderRoleId);
-        return true;
-    } catch (error) {
-        createGuildLogger(guild.id).error({ userId, trialRoleId, raiderRoleId, err: error }, 'Error updating member roles on pass.');
-        await interaction.reply({
-            content: 'Trial was passed, but I could not update the member roles. Please check my role permissions.',
-            ephemeral: true,
-        });
-        return false;
-    }
+	try {
+		const member = await guild.members.fetch(userId);
+		await member.roles.remove(trialRoleId);
+		await member.roles.add(raiderRoleId);
+		return true;
+	} catch (error) {
+		createGuildLogger(guild.id).error(
+			{ userId, trialRoleId, raiderRoleId, err: error },
+			"Error updating member roles on pass.",
+		);
+		await interaction.reply({
+			content:
+				"Trial was passed, but I could not update the member roles. Please check my role permissions.",
+			flags: ["Ephemeral"],
+		});
+		return false;
+	}
 }
-
 
 // Passing a trial should update the trial entry in the database, remove the trial role, add the raider role, and reply with a confirmation message.
 
 export default {
-    data: new SlashCommandBuilder()
-        .setName('pass')
-        .setDescription('Passes the trial')
-        .addUserOption(option =>
-            option.setName('target')
-                .setDescription('The user to pass the trial for')
-                .setRequired(true)
-        ),
-    async execute(interaction: ChatInputCommandInteraction, context: AppContext) {
-        const guildContext = await getValidatedGuildContext(interaction);
-        if (!guildContext) {
-            return;
-        }
+	data: new SlashCommandBuilder()
+		.setName("pass")
+		.setDescription("Passes the trial")
+		.addUserOption((option) =>
+			option
+				.setName("target")
+				.setDescription("The user to pass the trial for")
+				.setRequired(true),
+		),
+	async execute(interaction: ChatInputCommandInteraction, context: AppContext) {
+		const guildContext = await getValidatedGuildContext(interaction);
+		if (!guildContext) {
+			return;
+		}
 
-        const { guild, guildId } = guildContext;
-        const log = createGuildLogger(guildId);
+		const { guild, guildId } = guildContext;
+		const log = createGuildLogger(guildId);
 
-        const target = await getValidatedTarget(interaction);
-        if (!target) {
-            return;
-        }
+		const target = await getValidatedTarget(interaction);
+		if (!target) {
+			return;
+		}
 
-        const settings = await getSettingsOrReply(interaction, context, guildId);
-        if (!settings) {
-            return;
-        }
+		const settings = await getSettingsOrReply(interaction, context, guildId);
+		if (!settings) {
+			return;
+		}
 
-        let resolvedTrialStartTime: Date | null = null;
-        let trialDisplayName: string | null = null;
+		let resolvedTrialStartTime: Date | null = null;
+		let trialDisplayName: string | null = null;
 
-        try {
-            const result = await resolveTrial(context.prisma, guildId, target.id, true);
-            if (!result.updated) {
-                log.info({ targetId: target.id }, 'Pass rejected: no active trial found.');
-                await interaction.reply({
-                    content: `No active trial found for ${target.tag}.`,
-                    ephemeral: true,
-                });
-                return;
-            }
-            log.info({ targetId: target.id, trialId: result.trialId }, 'Trial marked as passed.');
-            audit(guildId, 'trial.passed', interaction.user.id, { targetId: target.id, trialId: result.trialId });
-            resolvedTrialStartTime = result.startTime ?? null;
-            trialDisplayName = result.userDisplayName ?? null;
+		try {
+			const result = await resolveTrial(
+				context.prisma,
+				guildId,
+				target.id,
+				true,
+			);
+			if (!result.updated) {
+				log.info(
+					{ targetId: target.id },
+					"Pass rejected: no active trial found.",
+				);
+				await interaction.reply({
+					content: `No active trial found for ${target.tag}.`,
+					flags: ["Ephemeral"],
+				});
+				return;
+			}
+			log.info(
+				{ targetId: target.id, trialId: result.trialId },
+				"Trial marked as passed.",
+			);
+			audit(guildId, "trial.passed", interaction.user.id, {
+				targetId: target.id,
+				trialId: result.trialId,
+			});
+			resolvedTrialStartTime = result.startTime ?? null;
+			trialDisplayName = result.userDisplayName ?? null;
 
-            const closeResult = await closeTrialVotePoll(context.prisma, guildId, result.trialId!);
-            if (closeResult.closed && closeResult.messageId) {
-                try {
-                    const channel = await context.client.channels.fetch(settings.officerChannelId);
-                    if (channel?.isTextBased()) {
-                        const msg = await channel.messages.fetch(closeResult.messageId);
-                        await msg.edit({ components: buildTrialVoteButtons(closeResult.pollId, true) });
-                    }
-                } catch (error) {
-                    log.error({ err: error }, 'Failed to disable vote poll buttons after trial passed.');
-                }
-            }
-        } catch (error) {
-            log.error({ targetId: target.id, err: error }, 'Error passing trial.');
-            await interaction.reply({
-                content: 'An error occurred while passing the trial. Please try again later.',
-                ephemeral: true,
-            });
-            return;
-        }
+			if (result.trialId) {
+				const closeResult = await closeTrialVotePoll(
+					context.prisma,
+					guildId,
+					result.trialId,
+				);
+				if (closeResult.closed && closeResult.messageId) {
+					try {
+						const channel = await context.client.channels.fetch(
+							settings.officerChannelId,
+						);
+						if (channel?.isTextBased()) {
+							const msg = await channel.messages.fetch(closeResult.messageId);
+							await msg.edit({
+								components: buildTrialVoteButtons(closeResult.pollId, true),
+							});
+						}
+					} catch (error) {
+						log.error(
+							{ err: error },
+							"Failed to disable vote poll buttons after trial passed.",
+						);
+					}
+				}
+			}
+		} catch (error) {
+			log.error({ targetId: target.id, err: error }, "Error passing trial.");
+			await interaction.reply({
+				content:
+					"An error occurred while passing the trial. Please try again later.",
+				flags: ["Ephemeral"],
+			});
+			return;
+		}
 
-        const rolesUpdated = await updateRolesOrReply(
-            interaction,
-            guild,
-            target.id,
-            settings.trialRoleId,
-            settings.raiderRoleId,
-        );
-        if (!rolesUpdated) {
-            return;
-        }
+		const rolesUpdated = await updateRolesOrReply(
+			interaction,
+			guild,
+			target.id,
+			settings.trialRoleId,
+			settings.raiderRoleId,
+		);
+		if (!rolesUpdated) {
+			return;
+		}
 
-        const displayName = trialDisplayName
-            ?? await resolveGuildDisplayName(context.client, guildId, target.id, target.displayName);
-        const officerDisplayName = await resolveGuildDisplayName(context.client, guildId, interaction.user.id, interaction.user.username);
-        const projectedEndDate = resolvedTrialStartTime
-            ? projectTrialExpectedEndDate(resolvedTrialStartTime, settings.raidScheduleCron, settings.raidAttendanceReminderThreshold)
-            : null;
-        const logoUrl = context.client.user?.displayAvatarURL({ extension: 'png', size: 256 });
-        const embed = buildTrialResolvedEmbed('passed', {
-            memberDisplayName: displayName,
-            memberId: target.id,
-            officerDisplayName,
-            officerId: interaction.user.id,
-            startedAt: resolvedTrialStartTime ?? new Date(),
-            expectedCompletionDate: projectedEndDate,
-        }, logoUrl);
-        const sendResult = await sendOfficerChannelMessage(context.client, settings.officerChannelId, {
-            embeds: [embed.toJSON()],
-        });
+		const displayName =
+			trialDisplayName ??
+			(await resolveGuildDisplayName(
+				context.client,
+				guildId,
+				target.id,
+				target.displayName,
+			));
+		const officerDisplayName = await resolveGuildDisplayName(
+			context.client,
+			guildId,
+			interaction.user.id,
+			interaction.user.username,
+		);
+		const projectedEndDate = resolvedTrialStartTime
+			? projectTrialExpectedEndDate(
+					resolvedTrialStartTime,
+					settings.raidScheduleCron,
+					settings.raidAttendanceReminderThreshold,
+				)
+			: null;
+		const logoUrl = context.client.user?.displayAvatarURL({
+			extension: "png",
+			size: 256,
+		});
+		const embed = buildTrialResolvedEmbed(
+			"passed",
+			{
+				memberDisplayName: displayName,
+				memberId: target.id,
+				officerDisplayName,
+				officerId: interaction.user.id,
+				startedAt: resolvedTrialStartTime ?? new Date(),
+				expectedCompletionDate: projectedEndDate,
+			},
+			logoUrl,
+		);
+		const sendResult = await sendOfficerChannelMessage(
+			context.client,
+			settings.officerChannelId,
+			{
+				embeds: [embed.toJSON()],
+			},
+		);
 
-        if (!sendResult.delivered) {
-            await interaction.reply({
-                content: 'Trial was passed, but I could not send the update to the officer channel. Please check channel settings and permissions.',
-                ephemeral: true,
-            });
-            return;
-        }
+		if (!sendResult.delivered) {
+			await interaction.reply({
+				content:
+					"Trial was passed, but I could not send the update to the officer channel. Please check channel settings and permissions.",
+				flags: ["Ephemeral"],
+			});
+			return;
+		}
 
-        await interaction.reply({
-            content: 'Posted pass update in the officer channel.',
-            ephemeral: true,
-        });
-    },
+		await interaction.reply({
+			content: "Posted pass update in the officer channel.",
+			flags: ["Ephemeral"],
+		});
+	},
 };

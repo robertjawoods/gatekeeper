@@ -1,183 +1,249 @@
-import { SlashCommandBuilder, type ChatInputCommandInteraction } from 'discord.js';
-import type { AppContext } from '../types.js';
-import { GuildSettingsMissingError, getGuildSettings, resolveGuildDisplayName, sendOfficerChannelMessage } from '../services/guildSettings.js';
-import { buildTrialStartedEmbed } from '../services/embedBuilders.js';
-import { projectTrialExpectedEndDate, startTrial } from '../services/trialService.js';
-import { createGuildLogger, audit } from '../services/logger.js';
+import {
+	type ChatInputCommandInteraction,
+	SlashCommandBuilder,
+} from "discord.js";
+import { buildTrialStartedEmbed } from "../services/embedBuilders.js";
+import {
+	GuildSettingsMissingError,
+	getGuildSettings,
+	resolveGuildDisplayName,
+	sendOfficerChannelMessage,
+} from "../services/guildSettings.js";
+import { audit, createGuildLogger } from "../services/logger.js";
+import {
+	projectTrialExpectedEndDate,
+	startTrial,
+} from "../services/trialService.js";
+import type { AppContext } from "../types.js";
 
 async function getValidatedTarget(interaction: ChatInputCommandInteraction) {
-    const target = interaction.options.getUser('target');
-    if (!target) {
-        await interaction.reply({
-            content: 'Target user is required.',
-            ephemeral: true,
-        });
-        return null;
-    }
+	const target = interaction.options.getUser("target");
+	if (!target) {
+		await interaction.reply({
+			content: "Target user is required.",
+			flags: ["Ephemeral"],
+		});
+		return null;
+	}
 
-    return target;
+	return target;
 }
 
-async function getValidatedGuildContext(interaction: ChatInputCommandInteraction) {
-    const guild = interaction.guild;
-    const guildId = interaction.guildId;
+async function getValidatedGuildContext(
+	interaction: ChatInputCommandInteraction,
+) {
+	const guild = interaction.guild;
+	const guildId = interaction.guildId;
 
-    if (!guild || !guildId) {
-        await interaction.reply({
-            content: 'This command can only be used in a server.',
-            ephemeral: true,
-        });
-        return null;
-    }
+	if (!guild || !guildId) {
+		await interaction.reply({
+			content: "This command can only be used in a server.",
+			flags: ["Ephemeral"],
+		});
+		return null;
+	}
 
-    return { guild, guildId };
+	return { guild, guildId };
 }
 
-async function getSettingsOrReply(interaction: ChatInputCommandInteraction, context: AppContext, guildId: string) {
-    try {
-        return await getGuildSettings(context.prisma, guildId);
-    } catch (error) {
-        if (error instanceof GuildSettingsMissingError) {
-            await interaction.reply({
-                content: 'Server settings have not been configured yet. Run `/settings` first.',
-                ephemeral: true,
-            });
-            return null;
-        }
+async function getSettingsOrReply(
+	interaction: ChatInputCommandInteraction,
+	context: AppContext,
+	guildId: string,
+) {
+	try {
+		return await getGuildSettings(context.prisma, guildId);
+	} catch (error) {
+		if (error instanceof GuildSettingsMissingError) {
+			await interaction.reply({
+				content:
+					"Server settings have not been configured yet. Run `/settings` first.",
+				flags: ["Ephemeral"],
+			});
+			return null;
+		}
 
-        createGuildLogger(guildId).error({ err: error }, 'Error retrieving guild settings.');
-        await interaction.reply({
-            content: 'An error occurred while retrieving server settings. Please try again later.',
-            ephemeral: true,
-        });
-        return null;
-    }
+		createGuildLogger(guildId).error(
+			{ err: error },
+			"Error retrieving guild settings.",
+		);
+		await interaction.reply({
+			content:
+				"An error occurred while retrieving server settings. Please try again later.",
+			flags: ["Ephemeral"],
+		});
+		return null;
+	}
 }
 
 async function addTrialRoleOrReply(
-    interaction: ChatInputCommandInteraction,
-    guild: NonNullable<ChatInputCommandInteraction['guild']>,
-    userId: string,
-    trialRoleId: string,
+	interaction: ChatInputCommandInteraction,
+	guild: NonNullable<ChatInputCommandInteraction["guild"]>,
+	userId: string,
+	trialRoleId: string,
 ) {
-    try {
-        const member = await guild.members.fetch(userId);
-        await member.roles.add(trialRoleId);
-        return true;
-    } catch (error) {
-        createGuildLogger(guild.id).error({ userId, trialRoleId, err: error }, 'Error adding trial role.');
-        await interaction.reply({
-            content: 'Trial was created, but I could not add the trial role. Please check my role permissions.',
-            ephemeral: true,
-        });
-        return false;
-    }
+	try {
+		const member = await guild.members.fetch(userId);
+		await member.roles.add(trialRoleId);
+		return true;
+	} catch (error) {
+		createGuildLogger(guild.id).error(
+			{ userId, trialRoleId, err: error },
+			"Error adding trial role.",
+		);
+		await interaction.reply({
+			content:
+				"Trial was created, but I could not add the trial role. Please check my role permissions.",
+			flags: ["Ephemeral"],
+		});
+		return false;
+	}
 }
 
-
-// Starting a trial should create a new trial entry in the database and reply with a confirmation message. 
-// It should also ensure that the trial target is given the trial role 
+// Starting a trial should create a new trial entry in the database and reply with a confirmation message.
+// It should also ensure that the trial target is given the trial role
 // It should check if the user already has an active trial and prevent starting a new one if they do.
 // The trial entry should include the user who started the trial, the start time, and any other relevant information.
 
 export default {
-    data: new SlashCommandBuilder()
-        .setName('start')
-        .setDescription('Starts the trial')
-        .addUserOption(option =>
-            option.setName('target')
-                .setDescription('The user to start the trial for')
-                .setRequired(true)
-        ),
-    async execute(interaction: ChatInputCommandInteraction, context: AppContext) {
-        const guildContext = await getValidatedGuildContext(interaction);
-        if (!guildContext) {
-            return;
-        }
+	data: new SlashCommandBuilder()
+		.setName("start")
+		.setDescription("Starts the trial")
+		.addUserOption((option) =>
+			option
+				.setName("target")
+				.setDescription("The user to start the trial for")
+				.setRequired(true),
+		),
+	async execute(interaction: ChatInputCommandInteraction, context: AppContext) {
+		const guildContext = await getValidatedGuildContext(interaction);
+		if (!guildContext) {
+			return;
+		}
 
-        const { guild, guildId } = guildContext;
-        const log = createGuildLogger(guildId);
+		const { guild, guildId } = guildContext;
+		const log = createGuildLogger(guildId);
 
-        const target = await getValidatedTarget(interaction);
-        if (!target) {
-            return;
-        }
+		const target = await getValidatedTarget(interaction);
+		if (!target) {
+			return;
+		}
 
-        const settings = await getSettingsOrReply(interaction, context, guildId);
-        if (!settings) {
-            return;
-        }
+		const settings = await getSettingsOrReply(interaction, context, guildId);
+		if (!settings) {
+			return;
+		}
 
-        const targetDisplayNameSnapshot = await resolveGuildDisplayName(context.client, guildId, target.id, target.displayName);
-        const officerDisplayNameSnapshot = await resolveGuildDisplayName(context.client, guildId, interaction.user.id, interaction.user.username);
+		const targetDisplayNameSnapshot = await resolveGuildDisplayName(
+			context.client,
+			guildId,
+			target.id,
+			target.displayName,
+		);
+		const officerDisplayNameSnapshot = await resolveGuildDisplayName(
+			context.client,
+			guildId,
+			interaction.user.id,
+			interaction.user.username,
+		);
 
-        let createdTrialStartTime: Date | null = null;
+		let createdTrialStartTime: Date | null = null;
 
-        try {
-            const result = await startTrial(
-                context.prisma,
-                guildId,
-                target.id,
-                interaction.user.id,
-                targetDisplayNameSnapshot,
-                officerDisplayNameSnapshot,
-            );
+		try {
+			const result = await startTrial(
+				context.prisma,
+				guildId,
+				target.id,
+				interaction.user.id,
+				targetDisplayNameSnapshot,
+				officerDisplayNameSnapshot,
+			);
 
-            if (!result.created) {
-                log.info({ targetId: target.id }, 'Trial start rejected: user already has an active trial.');
-                await interaction.reply({
-                    content: `${target.tag} already has an active trial in this server.`,
-                    ephemeral: true,
-                });
-                return;
-            }
+			if (!result.created) {
+				log.info(
+					{ targetId: target.id },
+					"Trial start rejected: user already has an active trial.",
+				);
+				await interaction.reply({
+					content: `${target.tag} already has an active trial in this server.`,
+					flags: ["Ephemeral"],
+				});
+				return;
+			}
 
-            log.info({ targetId: target.id, trialId: result.trial?.id }, 'Trial created successfully.');
-            audit(guildId, 'trial.started', interaction.user.id, { targetId: target.id, trialId: result.trial?.id });
-            createdTrialStartTime = result.trial?.startTime ?? null;
-        } catch (error) {
-            log.error({ targetId: target.id, err: error }, 'Error creating trial.');
-            await interaction.reply({
-                content: 'An error occurred while starting the trial. Please try again later.',
-                ephemeral: true,
-            });
-            return;
-        }
+			log.info(
+				{ targetId: target.id, trialId: result.trial?.id },
+				"Trial created successfully.",
+			);
+			audit(guildId, "trial.started", interaction.user.id, {
+				targetId: target.id,
+				trialId: result.trial?.id,
+			});
+			createdTrialStartTime = result.trial?.startTime ?? null;
+		} catch (error) {
+			log.error({ targetId: target.id, err: error }, "Error creating trial.");
+			await interaction.reply({
+				content:
+					"An error occurred while starting the trial. Please try again later.",
+				flags: ["Ephemeral"],
+			});
+			return;
+		}
 
-        const roleUpdated = await addTrialRoleOrReply(interaction, guild, target.id, settings.trialRoleId);
-        if (!roleUpdated) {
-            return;
-        }
+		const roleUpdated = await addTrialRoleOrReply(
+			interaction,
+			guild,
+			target.id,
+			settings.trialRoleId,
+		);
+		if (!roleUpdated) {
+			return;
+		}
 
-        const displayName = targetDisplayNameSnapshot;
-        const officerDisplayName = officerDisplayNameSnapshot;
-        const projectedEndDate = createdTrialStartTime
-            ? projectTrialExpectedEndDate(createdTrialStartTime, settings.raidScheduleCron, settings.raidAttendanceReminderThreshold)
-            : null;
-        const logoUrl = context.client.user?.displayAvatarURL({ extension: 'png', size: 256 });
-        const embed = buildTrialStartedEmbed({
-            memberDisplayName: displayName,
-            memberId: target.id,
-            officerDisplayName,
-            officerId: interaction.user.id,
-            startedAt: createdTrialStartTime ?? new Date(),
-            expectedCompletionDate: projectedEndDate,
-        }, logoUrl);
-        const sendResult = await sendOfficerChannelMessage(context.client, settings.officerChannelId, {
-            embeds: [embed.toJSON()],
-        });
+		const displayName = targetDisplayNameSnapshot;
+		const officerDisplayName = officerDisplayNameSnapshot;
+		const projectedEndDate = createdTrialStartTime
+			? projectTrialExpectedEndDate(
+					createdTrialStartTime,
+					settings.raidScheduleCron,
+					settings.raidAttendanceReminderThreshold,
+				)
+			: null;
+		const logoUrl = context.client.user?.displayAvatarURL({
+			extension: "png",
+			size: 256,
+		});
+		const embed = buildTrialStartedEmbed(
+			{
+				memberDisplayName: displayName,
+				memberId: target.id,
+				officerDisplayName,
+				officerId: interaction.user.id,
+				startedAt: createdTrialStartTime ?? new Date(),
+				expectedCompletionDate: projectedEndDate,
+			},
+			logoUrl,
+		);
+		const sendResult = await sendOfficerChannelMessage(
+			context.client,
+			settings.officerChannelId,
+			{
+				embeds: [embed.toJSON()],
+			},
+		);
 
-        if (!sendResult.delivered) {
-            await interaction.reply({
-                content: 'Trial was started, but I could not send the update to the officer channel. Please check channel settings and permissions.',
-                ephemeral: true,
-            });
-            return;
-        }
+		if (!sendResult.delivered) {
+			await interaction.reply({
+				content:
+					"Trial was started, but I could not send the update to the officer channel. Please check channel settings and permissions.",
+				flags: ["Ephemeral"],
+			});
+			return;
+		}
 
-        await interaction.reply({
-            content: 'Posted start update in the officer channel.',
-            ephemeral: true,
-        });
-    },
+		await interaction.reply({
+			content: "Posted start update in the officer channel.",
+			flags: ["Ephemeral"],
+		});
+	},
 };

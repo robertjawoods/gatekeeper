@@ -1,107 +1,164 @@
-import { SlashCommandBuilder, type ChatInputCommandInteraction } from 'discord.js';
-import type { AppContext } from '../types.js';
-import { GuildSettingsMissingError, getGuildSettings, resolveGuildDisplayName, sendOfficerChannelMessage } from '../services/guildSettings.js';
-import { buildFeedbackSummaryEmbed } from '../services/embedBuilders.js';
-import { getMemberFeedbackSummary } from '../services/feedbackService.js';
-import { createGuildLogger } from '../services/logger.js';
-import { projectTrialExpectedEndDate } from '../services/trialService.js';
+import {
+	type ChatInputCommandInteraction,
+	SlashCommandBuilder,
+} from "discord.js";
+import { buildFeedbackSummaryEmbed } from "../services/embedBuilders.js";
+import { getMemberFeedbackSummary } from "../services/feedbackService.js";
+import {
+	GuildSettingsMissingError,
+	getGuildSettings,
+	resolveGuildDisplayName,
+	sendOfficerChannelMessage,
+} from "../services/guildSettings.js";
+import { createGuildLogger } from "../services/logger.js";
+import { projectTrialExpectedEndDate } from "../services/trialService.js";
+import type { AppContext } from "../types.js";
 
 export default {
-    data: new SlashCommandBuilder()
-        .setName('summary')
-        .setDescription('Shows trial feedback summary for a member')
-        .addUserOption(option =>
-            option.setName('member')
-                .setDescription('The member to summarize feedback for')
-                .setRequired(true)
-        ),
-    async execute(interaction: ChatInputCommandInteraction, context: AppContext) {
-        const guildId = interaction.guildId;
+	data: new SlashCommandBuilder()
+		.setName("summary")
+		.setDescription("Shows trial feedback summary for a member")
+		.addUserOption((option) =>
+			option
+				.setName("member")
+				.setDescription("The member to summarize feedback for")
+				.setRequired(true),
+		),
+	async execute(interaction: ChatInputCommandInteraction, context: AppContext) {
+		const guildId = interaction.guildId;
 
-        if (!guildId) {
-            await interaction.reply({
-                content: 'This command can only be used in a server.',
-                ephemeral: true,
-            });
-            return;
-        }
+		if (!guildId) {
+			await interaction.reply({
+				content: "This command can only be used in a server.",
+				flags: ["Ephemeral"],
+			});
+			return;
+		}
 
-        let settings;
+		let settings: Awaited<ReturnType<typeof getGuildSettings>>;
 
-        try {
-            settings = await getGuildSettings(context.prisma, guildId);
-        } catch (error) {
-            if (error instanceof GuildSettingsMissingError) {
-                await interaction.reply({
-                    content: 'Server settings have not been configured yet. Run `/settings` first.',
-                    ephemeral: true,
-                });
-                return;
-            }
+		try {
+			settings = await getGuildSettings(context.prisma, guildId);
+		} catch (error) {
+			if (error instanceof GuildSettingsMissingError) {
+				await interaction.reply({
+					content:
+						"Server settings have not been configured yet. Run `/settings` first.",
+					flags: ["Ephemeral"],
+				});
+				return;
+			}
 
-            createGuildLogger(guildId).error({ err: error }, 'Error retrieving guild settings.');
-            await interaction.reply({
-                content: 'An error occurred while retrieving server settings. Please try again later.',
-                ephemeral: true,
-            });
-            return;
-        }
+			createGuildLogger(guildId).error(
+				{ err: error },
+				"Error retrieving guild settings.",
+			);
+			await interaction.reply({
+				content:
+					"An error occurred while retrieving server settings. Please try again later.",
+				flags: ["Ephemeral"],
+			});
+			return;
+		}
 
-        const member = interaction.options.getUser('member');
-        if (!member) {
-            await interaction.reply({
-                content: 'Member is required.',
-                ephemeral: true,
-            });
-            return;
-        }
+		const member = interaction.options.getUser("member");
+		if (!member) {
+			await interaction.reply({
+				content: "Member is required.",
+				flags: ["Ephemeral"],
+			});
+			return;
+		}
 
-        try {
-            const result = await getMemberFeedbackSummary(context.prisma, guildId, member.id);
-            const displayName = result.outcome === 'no_feedback' && result.userDisplayName
-                ? result.userDisplayName
-                : await resolveGuildDisplayName(context.client, guildId, member.id, member.displayName);
+		try {
+			const result = await getMemberFeedbackSummary(
+				context.prisma,
+				guildId,
+				member.id,
+			);
+			const displayName =
+				result.outcome === "no_feedback" && result.userDisplayName
+					? result.userDisplayName
+					: await resolveGuildDisplayName(
+							context.client,
+							guildId,
+							member.id,
+							member.displayName,
+						);
 
-            if (result.outcome === 'no_active_trial') {
-                createGuildLogger(guildId).info({ memberId: member.id }, 'Summary requested but no active trial found.');
-            } else if (result.outcome === 'no_feedback') {
-                createGuildLogger(guildId).info({ memberId: member.id, trialId: result.trialId }, 'Summary requested but no feedback yet.');
-            } else {
-                createGuildLogger(guildId).info({ memberId: member.id, trialId: result.summary.trialId, feedbackCount: result.summary.feedbackCount }, 'Summary retrieved.');
-            }
+			if (result.outcome === "no_active_trial") {
+				createGuildLogger(guildId).info(
+					{ memberId: member.id },
+					"Summary requested but no active trial found.",
+				);
+			} else if (result.outcome === "no_feedback") {
+				createGuildLogger(guildId).info(
+					{ memberId: member.id, trialId: result.trialId },
+					"Summary requested but no feedback yet.",
+				);
+			} else {
+				createGuildLogger(guildId).info(
+					{
+						memberId: member.id,
+						trialId: result.summary.trialId,
+						feedbackCount: result.summary.feedbackCount,
+					},
+					"Summary retrieved.",
+				);
+			}
 
-            const expectedCompletionDate = result.outcome === 'no_active_trial'
-                ? null
-                : projectTrialExpectedEndDate(
-                    result.outcome === 'no_feedback' ? result.trialStartTime : result.summary.trialStartTime,
-                    settings.raidScheduleCron,
-                    settings.raidAttendanceReminderThreshold,
-                );
-            const logoUrl = context.client.user?.displayAvatarURL({ extension: 'png', size: 256 });
-            const embed = buildFeedbackSummaryEmbed(displayName, result, expectedCompletionDate, logoUrl);
+			const expectedCompletionDate =
+				result.outcome === "no_active_trial"
+					? null
+					: projectTrialExpectedEndDate(
+							result.outcome === "no_feedback"
+								? result.trialStartTime
+								: result.summary.trialStartTime,
+							settings.raidScheduleCron,
+							settings.raidAttendanceReminderThreshold,
+						);
+			const logoUrl = context.client.user?.displayAvatarURL({
+				extension: "png",
+				size: 256,
+			});
+			const embed = buildFeedbackSummaryEmbed(
+				displayName,
+				result,
+				expectedCompletionDate,
+				logoUrl,
+			);
 
-            const sendResult = await sendOfficerChannelMessage(context.client, settings.officerChannelId, {
-                embeds: [embed.toJSON()],
-            });
+			const sendResult = await sendOfficerChannelMessage(
+				context.client,
+				settings.officerChannelId,
+				{
+					embeds: [embed.toJSON()],
+				},
+			);
 
-            if (!sendResult.delivered) {
-                await interaction.reply({
-                    content: 'I could not send the summary to the officer channel. Please check channel settings and permissions.',
-                    ephemeral: true,
-                });
-                return;
-            }
+			if (!sendResult.delivered) {
+				await interaction.reply({
+					content:
+						"I could not send the summary to the officer channel. Please check channel settings and permissions.",
+					flags: ["Ephemeral"],
+				});
+				return;
+			}
 
-            await interaction.reply({
-                content: 'Posted the trial summary in the officer channel.',
-                ephemeral: true,
-            });
-        } catch (error) {
-            createGuildLogger(guildId).error({ memberId: member.id, err: error }, 'Error retrieving trial feedback summary.');
-            await interaction.reply({
-                content: 'An error occurred while retrieving the trial feedback summary. Please try again later.',
-                ephemeral: true,
-            });
-        }
-    },
+			await interaction.reply({
+				content: "Posted the trial summary in the officer channel.",
+				flags: ["Ephemeral"],
+			});
+		} catch (error) {
+			createGuildLogger(guildId).error(
+				{ memberId: member.id, err: error },
+				"Error retrieving trial feedback summary.",
+			);
+			await interaction.reply({
+				content:
+					"An error occurred while retrieving the trial feedback summary. Please try again later.",
+				flags: ["Ephemeral"],
+			});
+		}
+	},
 };

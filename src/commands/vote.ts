@@ -1,121 +1,173 @@
-import { SlashCommandBuilder, type ChatInputCommandInteraction } from 'discord.js';
-import type { AppContext } from '../types.js';
 import {
-    GuildSettingsMissingError,
-    getGuildSettings,
-    resolveGuildDisplayName,
-    sendOfficerChannelMessage,
-} from '../services/guildSettings.js';
-import { buildTrialVotePollEmbed } from '../services/embedBuilders.js';
+	type ChatInputCommandInteraction,
+	SlashCommandBuilder,
+} from "discord.js";
+import { buildTrialVotePollEmbed } from "../services/embedBuilders.js";
 import {
-    attachTrialVotePollMessage,
-    buildTrialVoteButtons,
-    createTrialVotePoll,
-} from '../services/voteService.js';
+	GuildSettingsMissingError,
+	getGuildSettings,
+	resolveGuildDisplayName,
+	sendOfficerChannelMessage,
+} from "../services/guildSettings.js";
+import {
+	attachTrialVotePollMessage,
+	buildTrialVoteButtons,
+	createTrialVotePoll,
+} from "../services/voteService.js";
+import type { AppContext } from "../types.js";
 
 async function getValidatedTarget(interaction: ChatInputCommandInteraction) {
-    const target = interaction.options.getUser('target');
-    if (!target) {
-        await interaction.editReply({ content: 'Target user is required.' });
-        return null;
-    }
+	const target = interaction.options.getUser("target");
+	if (!target) {
+		await interaction.editReply({ content: "Target user is required." });
+		return null;
+	}
 
-    return target;
+	return target;
 }
 
-async function getValidatedGuildContext(interaction: ChatInputCommandInteraction) {
-    const guild = interaction.guild;
-    const guildId = interaction.guildId;
+async function getValidatedGuildContext(
+	interaction: ChatInputCommandInteraction,
+) {
+	const guild = interaction.guild;
+	const guildId = interaction.guildId;
 
-    if (!guild || !guildId) {
-        await interaction.editReply({ content: 'This command can only be used in a server.' });
-        return null;
-    }
+	if (!guild || !guildId) {
+		await interaction.editReply({
+			content: "This command can only be used in a server.",
+		});
+		return null;
+	}
 
-    return { guild, guildId };
+	return { guild, guildId };
 }
 
-async function getSettingsOrReply(interaction: ChatInputCommandInteraction, context: AppContext, guildId: string) {
-    try {
-        return await getGuildSettings(context.prisma, guildId);
-    } catch (error) {
-        if (error instanceof GuildSettingsMissingError) {
-            await interaction.editReply({ content: 'Server settings have not been configured yet. Run `/settings` first.' });
-            return null;
-        }
+async function getSettingsOrReply(
+	interaction: ChatInputCommandInteraction,
+	context: AppContext,
+	guildId: string,
+) {
+	try {
+		return await getGuildSettings(context.prisma, guildId);
+	} catch (error) {
+		if (error instanceof GuildSettingsMissingError) {
+			await interaction.editReply({
+				content:
+					"Server settings have not been configured yet. Run `/settings` first.",
+			});
+			return null;
+		}
 
-        console.error('Error retrieving guild settings:', error);
-        await interaction.editReply({ content: 'An error occurred while retrieving server settings. Please try again later.' });
-        return null;
-    }
+		console.error("Error retrieving guild settings:", error);
+		await interaction.editReply({
+			content:
+				"An error occurred while retrieving server settings. Please try again later.",
+		});
+		return null;
+	}
 }
 
 export default {
-    data: new SlashCommandBuilder()
-        .setName('vote')
-        .setDescription('Creates a trial vote poll in the officer channel')
-        .addUserOption(option =>
-            option
-                .setName('target')
-                .setDescription('The user to vote on')
-                .setRequired(true),
-        ),
-    async execute(interaction: ChatInputCommandInteraction, context: AppContext) {
-        await interaction.deferReply({ ephemeral: true });
+	data: new SlashCommandBuilder()
+		.setName("vote")
+		.setDescription("Creates a trial vote poll in the officer channel")
+		.addUserOption((option) =>
+			option
+				.setName("target")
+				.setDescription("The user to vote on")
+				.setRequired(true),
+		),
+	async execute(interaction: ChatInputCommandInteraction, context: AppContext) {
+		await interaction.deferReply({ flags: ["Ephemeral"] });
 
-        const guildContext = await getValidatedGuildContext(interaction);
-        if (!guildContext) {
-            return;
-        }
+		const guildContext = await getValidatedGuildContext(interaction);
+		if (!guildContext) {
+			return;
+		}
 
-        const { guildId } = guildContext;
-        const target = await getValidatedTarget(interaction);
-        if (!target) {
-            return;
-        }
+		const { guildId } = guildContext;
+		const target = await getValidatedTarget(interaction);
+		if (!target) {
+			return;
+		}
 
-        const settings = await getSettingsOrReply(interaction, context, guildId);
-        if (!settings) {
-            return;
-        }
+		const settings = await getSettingsOrReply(interaction, context, guildId);
+		if (!settings) {
+			return;
+		}
 
-        const pollResult = await createTrialVotePoll(context.prisma, guildId, target.id, interaction.user.id);
-        if (!pollResult.created) {
-            await interaction.editReply({ content: `No active trial found for ${target.tag}.` });
-            return;
-        }
+		const pollResult = await createTrialVotePoll(
+			context.prisma,
+			guildId,
+			target.id,
+			interaction.user.id,
+		);
+		if (!pollResult.created) {
+			await interaction.editReply({
+				content: `No active trial found for ${target.tag}.`,
+			});
+			return;
+		}
 
-        const poll = pollResult.poll;
-        const logoUrl = context.client.user?.displayAvatarURL({ extension: 'png', size: 256 });
-        const targetDisplayName = poll.targetDisplayName
-            ?? await resolveGuildDisplayName(context.client, guildId, target.id, target.displayName);
-        const embed = buildTrialVotePollEmbed({
-            targetDisplayName,
-            targetId: poll.targetId,
-            trialId: poll.trialId,
-            pollId: poll.pollId,
-            open: poll.open,
-            passVotes: poll.passVotes,
-            failVotes: poll.failVotes,
-            extendVotes: poll.extendVotes,
-            totalVotes: poll.totalVotes,
-        }, logoUrl);
+		const poll = pollResult.poll;
+		const logoUrl = context.client.user?.displayAvatarURL({
+			extension: "png",
+			size: 256,
+		});
+		const targetDisplayName =
+			poll.targetDisplayName ??
+			(await resolveGuildDisplayName(
+				context.client,
+				guildId,
+				target.id,
+				target.displayName,
+			));
+		const embed = buildTrialVotePollEmbed(
+			{
+				targetDisplayName,
+				targetId: poll.targetId,
+				trialId: poll.trialId,
+				pollId: poll.pollId,
+				open: poll.open,
+				passVotes: poll.passVotes,
+				failVotes: poll.failVotes,
+				extendVotes: poll.extendVotes,
+				totalVotes: poll.totalVotes,
+			},
+			logoUrl,
+		);
 
-        const sendResult = await sendOfficerChannelMessage(context.client, settings.officerChannelId, {
-            embeds: [embed],
-            components: buildTrialVoteButtons(poll.pollId, !poll.open),
-        });
+		const sendResult = await sendOfficerChannelMessage(
+			context.client,
+			settings.officerChannelId,
+			{
+				embeds: [embed],
+				components: buildTrialVoteButtons(poll.pollId, !poll.open),
+			},
+		);
 
-        if (!sendResult.delivered) {
-            await interaction.editReply({ content: 'Vote poll was created, but I could not send it to the officer channel. Please check channel settings and permissions.' });
-            return;
-        }
+		if (!sendResult.delivered) {
+			await interaction.editReply({
+				content:
+					"Vote poll was created, but I could not send it to the officer channel. Please check channel settings and permissions.",
+			});
+			return;
+		}
 
-        const attached = await attachTrialVotePollMessage(context.prisma, guildId, poll.pollId, sendResult.messageId);
-        if (!attached) {
-            console.error(`Failed to attach message ${sendResult.messageId} to poll ${poll.pollId} in guild ${guildId}.`);
-        }
+		const attached = await attachTrialVotePollMessage(
+			context.prisma,
+			guildId,
+			poll.pollId,
+			sendResult.messageId,
+		);
+		if (!attached) {
+			console.error(
+				`Failed to attach message ${sendResult.messageId} to poll ${poll.pollId} in guild ${guildId}.`,
+			);
+		}
 
-        await interaction.editReply({ content: 'Posted vote poll in the officer channel.' });
-    },
+		await interaction.editReply({
+			content: "Posted vote poll in the officer channel.",
+		});
+	},
 };

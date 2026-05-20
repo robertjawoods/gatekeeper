@@ -1,178 +1,215 @@
-import type { AppContext } from '../types.js';
-import { listActiveTrialAttendance } from './feedbackService.js';
+import type { AppContext } from "../types.js";
+import { buildRaidAttendanceReminderEmbed } from "./embedBuilders.js";
+import { listActiveTrialAttendance } from "./feedbackService.js";
 import {
-    findGuildSettings,
-    resolveGuildDisplayName,
-    sendOfficerChannelMessage,
-} from './guildSettings.js';
-import { buildRaidAttendanceReminderEmbed } from './embedBuilders.js';
-import { createGuildLogger, audit } from './logger.js';
+	findGuildSettings,
+	resolveGuildDisplayName,
+	sendOfficerChannelMessage,
+} from "./guildSettings.js";
+import { audit, createGuildLogger } from "./logger.js";
 
 function toLocalDateKey(date: Date): string {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+	const year = date.getFullYear();
+	const month = String(date.getMonth() + 1).padStart(2, "0");
+	const day = String(date.getDate()).padStart(2, "0");
+	return `${year}-${month}-${day}`;
 }
 
 export type RaidAttendanceReminderRunResult = {
-    guildId: string;
-    skipped: boolean;
-    skippedReason?: 'settings_missing' | 'schedule_not_configured';
-    candidatesEvaluated: number;
-    remindersSent: number;
-    remindersSkippedAsDuplicate: number;
-    deliveryFailures: number;
+	guildId: string;
+	skipped: boolean;
+	skippedReason?: "settings_missing" | "schedule_not_configured";
+	candidatesEvaluated: number;
+	remindersSent: number;
+	remindersSkippedAsDuplicate: number;
+	deliveryFailures: number;
 };
 
 export async function runGuildRaidAttendanceReminderCycle(
-    context: AppContext,
-    guildId: string,
+	context: AppContext,
+	guildId: string,
 ): Promise<RaidAttendanceReminderRunResult> {
-    const log = createGuildLogger(guildId);
-    const settings = await findGuildSettings(context.prisma, guildId);
+	const log = createGuildLogger(guildId);
+	const settings = await findGuildSettings(context.prisma, guildId);
 
-    if (!settings) {
-        log.warn('runGuildRaidAttendanceReminderCycle: no settings found, skipping.');
-        return {
-            guildId,
-            skipped: true,
-            skippedReason: 'settings_missing',
-            candidatesEvaluated: 0,
-            remindersSent: 0,
-            remindersSkippedAsDuplicate: 0,
-            deliveryFailures: 0,
-        };
-    }
+	if (!settings) {
+		log.warn(
+			"runGuildRaidAttendanceReminderCycle: no settings found, skipping.",
+		);
+		return {
+			guildId,
+			skipped: true,
+			skippedReason: "settings_missing",
+			candidatesEvaluated: 0,
+			remindersSent: 0,
+			remindersSkippedAsDuplicate: 0,
+			deliveryFailures: 0,
+		};
+	}
 
-    if (!settings.raidScheduleCron || !settings.raidAttendanceReminderThreshold) {
-        log.info('runGuildRaidAttendanceReminderCycle: schedule not configured, skipping.');
-        return {
-            guildId,
-            skipped: true,
-            skippedReason: 'schedule_not_configured',
-            candidatesEvaluated: 0,
-            remindersSent: 0,
-            remindersSkippedAsDuplicate: 0,
-            deliveryFailures: 0,
-        };
-    }
+	if (!settings.raidScheduleCron || !settings.raidAttendanceReminderThreshold) {
+		log.info(
+			"runGuildRaidAttendanceReminderCycle: schedule not configured, skipping.",
+		);
+		return {
+			guildId,
+			skipped: true,
+			skippedReason: "schedule_not_configured",
+			candidatesEvaluated: 0,
+			remindersSent: 0,
+			remindersSkippedAsDuplicate: 0,
+			deliveryFailures: 0,
+		};
+	}
 
-    const attendance = await listActiveTrialAttendance(context.prisma, guildId);
-    const threshold = settings.raidAttendanceReminderThreshold;
-    const candidates = attendance.filter(item => item.raidNightsAttended >= threshold);
-    const today = toLocalDateKey(new Date());
+	const attendance = await listActiveTrialAttendance(context.prisma, guildId);
+	const threshold = settings.raidAttendanceReminderThreshold;
+	const candidates = attendance.filter(
+		(item) => item.raidNightsAttended >= threshold,
+	);
+	const today = toLocalDateKey(new Date());
 
-    log.info({ candidatesEvaluated: candidates.length, threshold, today }, 'runGuildRaidAttendanceReminderCycle: evaluating candidates.');
+	log.info(
+		{ candidatesEvaluated: candidates.length, threshold, today },
+		"runGuildRaidAttendanceReminderCycle: evaluating candidates.",
+	);
 
-    let remindersSent = 0;
-    let remindersSkippedAsDuplicate = 0;
-    let deliveryFailures = 0;
+	let remindersSent = 0;
+	let remindersSkippedAsDuplicate = 0;
+	let deliveryFailures = 0;
 
-    for (const candidate of candidates) {
-        const existingReminder = await context.prisma.attendanceReminderLog.findUnique({
-            where: {
-                guildId_trialId_userId_reminderDate: {
-                    guildId,
-                    trialId: candidate.trialId,
-                    userId: candidate.userId,
-                    reminderDate: today,
-                },
-            },
-        });
+	for (const candidate of candidates) {
+		const existingReminder =
+			await context.prisma.attendanceReminderLog.findUnique({
+				where: {
+					guildId_trialId_userId_reminderDate: {
+						guildId,
+						trialId: candidate.trialId,
+						userId: candidate.userId,
+						reminderDate: today,
+					},
+				},
+			});
 
-        if (existingReminder) {
-            remindersSkippedAsDuplicate += 1;
-            log.info({ userId: candidate.userId, trialId: candidate.trialId, today }, 'Reminder already sent today, skipping duplicate.');
-            continue;
-        }
+		if (existingReminder) {
+			remindersSkippedAsDuplicate += 1;
+			log.info(
+				{ userId: candidate.userId, trialId: candidate.trialId, today },
+				"Reminder already sent today, skipping duplicate.",
+			);
+			continue;
+		}
 
-        const displayName = await resolveGuildDisplayName(
-            context.client,
-            guildId,
-            candidate.userId,
-            candidate.userId,
-        );
+		const displayName = await resolveGuildDisplayName(
+			context.client,
+			guildId,
+			candidate.userId,
+			candidate.userId,
+		);
 
-        const embed = buildRaidAttendanceReminderEmbed({
-            displayName,
-            userId: candidate.userId,
-            trialId: candidate.trialId,
-            raidNightsAttended: candidate.raidNightsAttended,
-            threshold,
-        });
+		const embed = buildRaidAttendanceReminderEmbed({
+			displayName,
+			userId: candidate.userId,
+			trialId: candidate.trialId,
+			raidNightsAttended: candidate.raidNightsAttended,
+			threshold,
+		});
 
-        const sendResult = await sendOfficerChannelMessage(context.client, settings.officerChannelId, {
-            embeds: [embed.toJSON()],
-        });
+		const sendResult = await sendOfficerChannelMessage(
+			context.client,
+			settings.officerChannelId,
+			{
+				embeds: [embed.toJSON()],
+			},
+		);
 
-        if (!sendResult.delivered) {
-            log.warn({ userId: candidate.userId, trialId: candidate.trialId, reason: sendResult.reason }, 'Failed to deliver attendance reminder.');
-            deliveryFailures += 1;
-            continue;
-        }
+		if (!sendResult.delivered) {
+			log.warn(
+				{
+					userId: candidate.userId,
+					trialId: candidate.trialId,
+					reason: sendResult.reason,
+				},
+				"Failed to deliver attendance reminder.",
+			);
+			deliveryFailures += 1;
+			continue;
+		}
 
-        await context.prisma.attendanceReminderLog.create({
-            data: {
-                guildId,
-                trialId: candidate.trialId,
-                userId: candidate.userId,
-                reminderDate: today,
-                attendanceCount: candidate.raidNightsAttended,
-            },
-        });
+		await context.prisma.attendanceReminderLog.create({
+			data: {
+				guildId,
+				trialId: candidate.trialId,
+				userId: candidate.userId,
+				reminderDate: today,
+				attendanceCount: candidate.raidNightsAttended,
+			},
+		});
 
-        audit(guildId, 'attendance.reminder_sent', 'system', { userId: candidate.userId, trialId: candidate.trialId, raidNightsAttended: candidate.raidNightsAttended });
-        remindersSent += 1;
-    }
+		audit(guildId, "attendance.reminder_sent", "system", {
+			userId: candidate.userId,
+			trialId: candidate.trialId,
+			raidNightsAttended: candidate.raidNightsAttended,
+		});
+		remindersSent += 1;
+	}
 
-    log.info({ remindersSent, remindersSkippedAsDuplicate, deliveryFailures }, 'runGuildRaidAttendanceReminderCycle: cycle complete.');
+	log.info(
+		{ remindersSent, remindersSkippedAsDuplicate, deliveryFailures },
+		"runGuildRaidAttendanceReminderCycle: cycle complete.",
+	);
 
-    return {
-        guildId,
-        skipped: false,
-        candidatesEvaluated: candidates.length,
-        remindersSent,
-        remindersSkippedAsDuplicate,
-        deliveryFailures,
-    };
+	return {
+		guildId,
+		skipped: false,
+		candidatesEvaluated: candidates.length,
+		remindersSent,
+		remindersSkippedAsDuplicate,
+		deliveryFailures,
+	};
 }
 
 export async function runRaidAttendanceReminderCycleForAllGuilds(
-    context: AppContext,
+	context: AppContext,
 ): Promise<RaidAttendanceReminderRunResult[]> {
-    const guildSettings = await context.prisma.settings.findMany({
-        where: {
-            raidScheduleCron: {
-                not: null,
-            },
-            raidAttendanceReminderThreshold: {
-                not: null,
-            },
-        },
-        select: {
-            guildId: true,
-        },
-    });
+	const guildSettings = await context.prisma.settings.findMany({
+		where: {
+			raidScheduleCron: {
+				not: null,
+			},
+			raidAttendanceReminderThreshold: {
+				not: null,
+			},
+		},
+		select: {
+			guildId: true,
+		},
+	});
 
-    const results: RaidAttendanceReminderRunResult[] = [];
+	const results: RaidAttendanceReminderRunResult[] = [];
 
-    for (const setting of guildSettings) {
-        try {
-            const result = await runGuildRaidAttendanceReminderCycle(context, setting.guildId);
-            results.push(result);
-        } catch (error) {
-            createGuildLogger(setting.guildId).error({ err: error }, 'Raid reminder cycle threw unexpectedly.');
-            results.push({
-                guildId: setting.guildId,
-                skipped: false,
-                candidatesEvaluated: 0,
-                remindersSent: 0,
-                remindersSkippedAsDuplicate: 0,
-                deliveryFailures: 1,
-            });
-        }
-    }
+	for (const setting of guildSettings) {
+		try {
+			const result = await runGuildRaidAttendanceReminderCycle(
+				context,
+				setting.guildId,
+			);
+			results.push(result);
+		} catch (error) {
+			createGuildLogger(setting.guildId).error(
+				{ err: error },
+				"Raid reminder cycle threw unexpectedly.",
+			);
+			results.push({
+				guildId: setting.guildId,
+				skipped: false,
+				candidatesEvaluated: 0,
+				remindersSent: 0,
+				remindersSkippedAsDuplicate: 0,
+				deliveryFailures: 1,
+			});
+		}
+	}
 
-    return results;
+	return results;
 }

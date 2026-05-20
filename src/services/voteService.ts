@@ -40,6 +40,10 @@ export type RecordTrialVoteResult =
     | { recorded: true; poll: TrialVotePollSnapshot }
     | { recorded: false; reason: 'poll_not_found' | 'wrong_guild' | 'poll_closed' | 'message_mismatch' };
 
+export type CloseTrialVotePollResult =
+    | { closed: true; pollId: number; messageId: string | null }
+    | { closed: false };
+
 function toSnapshot(poll: {
     id: number;
     guildId: string;
@@ -291,4 +295,26 @@ export async function recordTrialVote(
         recorded: true,
         poll: toSnapshot(poll),
     };
+}
+
+export async function closeTrialVotePoll(
+    prisma: PrismaClient,
+    guildId: string,
+    trialId: number,
+): Promise<CloseTrialVotePollResult> {
+    const existing = await prisma.trialVotePoll.findFirst({
+        where: { guildId, trialId, open: true },
+        select: { id: true, messageId: true },
+    });
+
+    if (!existing) {
+        return { closed: false };
+    }
+
+    await prisma.trialVotePoll.update({
+        where: { id: existing.id },
+        data: { open: false },
+    });
+
+    return { closed: true, pollId: existing.id, messageId: existing.messageId };
 }

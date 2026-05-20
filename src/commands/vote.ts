@@ -16,10 +16,7 @@ import {
 async function getValidatedTarget(interaction: ChatInputCommandInteraction) {
     const target = interaction.options.getUser('target');
     if (!target) {
-        await interaction.reply({
-            content: 'Target user is required.',
-            ephemeral: true,
-        });
+        await interaction.editReply({ content: 'Target user is required.' });
         return null;
     }
 
@@ -31,10 +28,7 @@ async function getValidatedGuildContext(interaction: ChatInputCommandInteraction
     const guildId = interaction.guildId;
 
     if (!guild || !guildId) {
-        await interaction.reply({
-            content: 'This command can only be used in a server.',
-            ephemeral: true,
-        });
+        await interaction.editReply({ content: 'This command can only be used in a server.' });
         return null;
     }
 
@@ -46,18 +40,12 @@ async function getSettingsOrReply(interaction: ChatInputCommandInteraction, cont
         return await getGuildSettings(context.prisma, guildId);
     } catch (error) {
         if (error instanceof GuildSettingsMissingError) {
-            await interaction.reply({
-                content: 'Server settings have not been configured yet. Run `/settings` first.',
-                ephemeral: true,
-            });
+            await interaction.editReply({ content: 'Server settings have not been configured yet. Run `/settings` first.' });
             return null;
         }
 
         console.error('Error retrieving guild settings:', error);
-        await interaction.reply({
-            content: 'An error occurred while retrieving server settings. Please try again later.',
-            ephemeral: true,
-        });
+        await interaction.editReply({ content: 'An error occurred while retrieving server settings. Please try again later.' });
         return null;
     }
 }
@@ -73,6 +61,8 @@ export default {
                 .setRequired(true),
         ),
     async execute(interaction: ChatInputCommandInteraction, context: AppContext) {
+        await interaction.deferReply({ ephemeral: true });
+
         const guildContext = await getValidatedGuildContext(interaction);
         if (!guildContext) {
             return;
@@ -91,10 +81,7 @@ export default {
 
         const pollResult = await createTrialVotePoll(context.prisma, guildId, target.id, interaction.user.id);
         if (!pollResult.created) {
-            await interaction.reply({
-                content: `No active trial found for ${target.tag}.`,
-                ephemeral: true,
-            });
+            await interaction.editReply({ content: `No active trial found for ${target.tag}.` });
             return;
         }
 
@@ -119,10 +106,7 @@ export default {
         });
 
         if (!sendResult.delivered) {
-            await interaction.reply({
-                content: 'Vote poll was created, but I could not send it to the officer channel. Please check channel settings and permissions.',
-                ephemeral: true,
-            });
+            await interaction.editReply({ content: 'Vote poll was created, but I could not send it to the officer channel. Please check channel settings and permissions.' });
             return;
         }
 
@@ -131,9 +115,6 @@ export default {
             console.error(`Failed to attach message ${sendResult.messageId} to poll ${poll.pollId} in guild ${guildId}.`);
         }
 
-        await interaction.reply({
-            content: 'Posted vote poll in the officer channel.',
-            ephemeral: true,
-        });
+        await interaction.editReply({ content: 'Posted vote poll in the officer channel.' });
     },
 };

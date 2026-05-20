@@ -4,6 +4,7 @@ import { GuildSettingsMissingError, getGuildSettings, resolveGuildDisplayName, s
 import { buildTrialResolvedEmbed } from '../services/embedBuilders.js';
 import { projectTrialExpectedEndDate, resolveTrial } from '../services/trialService.js';
 import { createGuildLogger, audit } from '../services/logger.js';
+import { buildTrialVoteButtons, closeTrialVotePoll } from '../services/voteService.js';
 
 export default {
     data: new SlashCommandBuilder()
@@ -71,6 +72,19 @@ export default {
             log.info({ targetId: target.id, trialId: result.trialId }, 'Trial marked as failed.');
             audit(interaction.guildId, 'trial.failed', interaction.user.id, { targetId: target.id, trialId: result.trialId });
             resolvedTrialStartTime = result.startTime ?? null;
+
+            const closeResult = await closeTrialVotePoll(context.prisma, interaction.guildId, result.trialId!);
+            if (closeResult.closed && closeResult.messageId) {
+                try {
+                    const channel = await context.client.channels.fetch(settings.officerChannelId);
+                    if (channel?.isTextBased()) {
+                        const msg = await channel.messages.fetch(closeResult.messageId);
+                        await msg.edit({ components: buildTrialVoteButtons(closeResult.pollId, true) });
+                    }
+                } catch (error) {
+                    log.error({ err: error }, 'Failed to disable vote poll buttons after trial failed.');
+                }
+            }
         } catch (error) {
             log.error({ targetId: target.id, err: error }, 'Error failing trial.');
             await interaction.reply({

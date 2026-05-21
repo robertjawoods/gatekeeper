@@ -2,15 +2,14 @@ import {
 	type APIRole,
 	type ChatInputCommandInteraction,
 	type Role,
-	SlashCommandBuilder,
 } from "discord.js";
+import { ApplicationCommandRegistry, Command } from "@sapphire/framework";
 import {
 	buildRoleDebugEmbed,
 	type RoleDebugRoleSnapshot,
 } from "../services/embedBuilders.js";
 import { findGuildSettings } from "../services/guildSettings.js";
 import { createGuildLogger } from "../services/logger.js";
-import type { AppContext } from "../types.js";
 
 function toRoleSnapshot(
 	role: Role | APIRole,
@@ -42,25 +41,39 @@ function getBotHighestRolePosition(
 	return botMember.roles.highest.position;
 }
 
-export default {
-	data: new SlashCommandBuilder()
-		.setName("roledebug")
-		.setDescription(
-			"Diagnose role visibility/manageability issues for settings",
-		)
-		.addRoleOption((option) =>
-			option
-				.setName("role")
-				.setDescription("Role to inspect")
-				.setRequired(false),
-		)
-		.addStringOption((option) =>
-			option
-				.setName("role_id")
-				.setDescription("Role ID to inspect if it is missing from role picker")
-				.setRequired(false),
-		),
-	async execute(interaction: ChatInputCommandInteraction, context: AppContext) {
+export class RoledebugCommand extends Command {
+	public constructor(context: Command.LoaderContext, options: Command.Options) {
+		super(context, {
+			...options,
+			name: "roledebug",
+			description: "Diagnose role visibility/manageability issues for settings",
+		});
+	}
+
+	public override registerApplicationCommands(
+		registry: ApplicationCommandRegistry,
+	) {
+		registry.registerChatInputCommand((builder) =>
+			builder
+				.setName(this.name)
+				.setDescription(this.description)
+				.addRoleOption((option) =>
+					option
+						.setName("role")
+						.setDescription("Role to inspect")
+						.setRequired(false),
+				)
+				.addStringOption((option) =>
+					option
+						.setName("role_id")
+						.setDescription("Role ID to inspect if it is missing from role picker")
+						.setRequired(false),
+				), { idHints: ["1506975871188209784", "1507106673238605936"] });
+	}
+
+	public override async chatInputRun(
+		interaction: ChatInputCommandInteraction,
+	) {
 		const guild = interaction.guild;
 		const guildId = interaction.guildId;
 
@@ -90,7 +103,7 @@ export default {
 		const managedRoleCount = guild.roles.cache.filter(
 			(role) => role.managed,
 		).size;
-		const logoUrl = context.client.user?.displayAvatarURL({
+		const logoUrl = this.container.client.user?.displayAvatarURL({
 			extension: "png",
 			size: 256,
 		});
@@ -113,7 +126,7 @@ export default {
 			return;
 		}
 
-		const settings = await findGuildSettings(context.prisma, guildId);
+		const settings = await findGuildSettings(this.container.prisma, guildId);
 		const trialRole = settings
 			? await guild.roles.fetch(settings.trialRoleId)
 			: null;
@@ -167,5 +180,5 @@ export default {
 			embeds: [embed],
 			flags: ["Ephemeral"],
 		});
-	},
-};
+	}
+}

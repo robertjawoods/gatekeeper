@@ -1,7 +1,7 @@
 import {
 	type ChatInputCommandInteraction,
-	SlashCommandBuilder,
 } from "discord.js";
+import { ApplicationCommandRegistry, Command } from "@sapphire/framework";
 import { buildTrialResolvedEmbed } from "../services/embedBuilders.js";
 import {
 	GuildSettingsMissingError,
@@ -18,19 +18,36 @@ import {
 	buildTrialVoteButtons,
 	closeTrialVotePoll,
 } from "../services/voteService.js";
-import type { AppContext } from "../types.js";
 
-export default {
-	data: new SlashCommandBuilder()
-		.setName("fail")
-		.setDescription("Fails the trial")
-		.addUserOption((option) =>
-			option
-				.setName("target")
-				.setDescription("The user to fail the trial for")
-				.setRequired(true),
-		),
-	async execute(interaction: ChatInputCommandInteraction, context: AppContext) {
+export class FailCommand extends Command {
+	public constructor(context: Command.LoaderContext, options: Command.Options) {
+		super(context, {
+			...options,
+			name: "fail",
+			description: "Fails the trial",
+		});
+	}
+
+	public override registerApplicationCommands(
+		registry: ApplicationCommandRegistry,
+	) {
+		registry.registerChatInputCommand((builder) =>
+			builder
+				.setName(this.name)
+				.setDescription(this.description)
+				.addUserOption((option) =>
+					option
+						.setName("target")
+						.setDescription("The user to fail the trial for")
+						.setRequired(true),
+				),
+			{ idHints: ["1507106766935162921"] },
+		);
+	}
+
+	public override async chatInputRun(
+		interaction: ChatInputCommandInteraction,
+	) {
 		const target = interaction.options.getUser("target");
 		const guild = interaction.guild;
 
@@ -57,7 +74,7 @@ export default {
 		let trialDisplayName: string | null = null;
 
 		try {
-			settings = await getGuildSettings(context.prisma, interaction.guildId);
+			settings = await getGuildSettings(this.container.prisma, interaction.guildId);
 		} catch (error) {
 			if (error instanceof GuildSettingsMissingError) {
 				await interaction.reply({
@@ -79,7 +96,7 @@ export default {
 
 		try {
 			const result = await resolveTrial(
-				context.prisma,
+				this.container.prisma,
 				interaction.guildId,
 				target.id,
 				false,
@@ -108,13 +125,13 @@ export default {
 
 			if (result.trialId) {
 				const closeResult = await closeTrialVotePoll(
-					context.prisma,
+					this.container.prisma,
 					interaction.guildId,
 					result.trialId,
 				);
 				if (closeResult.closed && closeResult.messageId) {
 					try {
-						const channel = await context.client.channels.fetch(
+						const channel = await this.container.client.channels.fetch(
 							settings.officerChannelId,
 						);
 						if (channel?.isTextBased()) {
@@ -160,13 +177,13 @@ export default {
 		const displayName =
 			trialDisplayName ??
 			(await resolveGuildDisplayName(
-				context.client,
+				this.container.client,
 				interaction.guildId,
 				target.id,
 				target.displayName,
 			));
 		const officerDisplayName = await resolveGuildDisplayName(
-			context.client,
+			this.container.client,
 			interaction.guildId,
 			interaction.user.id,
 			interaction.user.username,
@@ -178,7 +195,7 @@ export default {
 					settings.raidAttendanceReminderThreshold,
 				)
 			: null;
-		const logoUrl = context.client.user?.displayAvatarURL({
+		const logoUrl = this.container.client.user?.displayAvatarURL({
 			extension: "png",
 			size: 256,
 		});
@@ -195,7 +212,7 @@ export default {
 			logoUrl,
 		);
 		const sendResult = await sendOfficerChannelMessage(
-			context.client,
+			this.container.client,
 			settings.officerChannelId,
 			{
 				embeds: [embed.toJSON()],
@@ -215,5 +232,5 @@ export default {
 			content: "Posted fail update in the officer channel.",
 			flags: ["Ephemeral"],
 		});
-	},
-};
+	}
+}

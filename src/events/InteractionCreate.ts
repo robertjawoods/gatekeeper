@@ -1,10 +1,9 @@
 import {
 	type ButtonInteraction,
-	type ChatInputCommandInteraction,
-	Events,
 	type Interaction,
 	type ModalSubmitInteraction,
 } from "discord.js";
+import { Listener } from "@sapphire/framework";
 import { buildTrialVotePollEmbed } from "../services/embedBuilders.js";
 import {
 	createFeedback,
@@ -23,11 +22,10 @@ import {
 	parseVoteCustomId,
 	recordTrialVote,
 } from "../services/voteService.js";
-import type { AppContext } from "../types.js";
 
 async function handleSettingsModal(
 	interaction: ModalSubmitInteraction,
-	context: AppContext,
+	listener: Listener,
 ): Promise<void> {
 	const officerChannelId = interaction.fields
 		.getSelectedChannels("officerChannelId")
@@ -77,7 +75,7 @@ async function handleSettingsModal(
 		return;
 	}
 
-	await saveGuildSettings(context.prisma, {
+	await saveGuildSettings(listener.container.prisma, {
 		guildId: interaction.guildId,
 		officerChannelId,
 		trialRoleId,
@@ -86,7 +84,13 @@ async function handleSettingsModal(
 		raidAttendanceReminderThreshold: validation.normalizedThreshold,
 	});
 
-	await refreshGuildRaidReminderSchedule(context, interaction.guildId);
+	await refreshGuildRaidReminderSchedule(
+		{
+			prisma: listener.container.prisma,
+			client: listener.container.client,
+		},
+		interaction.guildId,
+	);
 
 	audit(interaction.guildId, "settings.updated", interaction.user.id, {
 		officerChannelId,
@@ -104,7 +108,7 @@ async function handleSettingsModal(
 
 async function handleFeedbackModal(
 	interaction: ModalSubmitInteraction,
-	context: AppContext,
+	listener: Listener,
 ): Promise<void> {
 	const feedbackContext = parseFeedbackModalCustomId(interaction.customId);
 	if (!feedbackContext) {
@@ -144,7 +148,7 @@ async function handleFeedbackModal(
 		return;
 	}
 
-	const result = await createFeedback(context.prisma, {
+	const result = await createFeedback(listener.container.prisma, {
 		guildId: interaction.guildId,
 		trialId: feedbackContext.trialId,
 		targetId: feedbackContext.targetId,
@@ -186,47 +190,9 @@ async function handleFeedbackModal(
 		flags: ["Ephemeral"],
 	});
 }
-
-async function handleChatCommand(
-	interaction: ChatInputCommandInteraction,
-	context: AppContext,
-): Promise<void> {
-	const command = context.getCommand(interaction.commandName);
-
-	if (!command) {
-		logger.error(
-			{ command: interaction.commandName, guildId: interaction.guildId },
-			"No handler found for command.",
-		);
-		return;
-	}
-
-	logger.info(
-		{
-			command: interaction.commandName,
-			guildId: interaction.guildId,
-			userId: interaction.user.id,
-		},
-		"Executing command.",
-	);
-
-	try {
-		await command.execute(interaction, context);
-	} catch (error) {
-		logger.error(
-			{
-				command: interaction.commandName,
-				guildId: interaction.guildId,
-				err: error,
-			},
-			"Unhandled error executing command.",
-		);
-	}
-}
-
 async function handleVoteButton(
 	interaction: ButtonInteraction,
-	context: AppContext,
+	listener: Listener,
 ): Promise<boolean> {
 	if (!isVoteCustomId(interaction.customId)) {
 		return false;
@@ -252,7 +218,7 @@ async function handleVoteButton(
 
 	await interaction.deferReply({ flags: ["Ephemeral"] });
 
-	const result = await recordTrialVote(context.prisma, {
+	const result = await recordTrialVote(listener.container.prisma, {
 		guildId: interaction.guildId,
 		pollId: voteContext.pollId,
 		officerId: interaction.user.id,
@@ -274,14 +240,14 @@ async function handleVoteButton(
 		return true;
 	}
 
-	const logoUrl = context.client.user?.displayAvatarURL({
+	const logoUrl = listener.container.client.user?.displayAvatarURL({
 		extension: "png",
 		size: 256,
 	});
 	const targetDisplayName =
 		result.poll.targetDisplayName ??
 		(await resolveGuildDisplayName(
-			context.client,
+			listener.container.client,
 			interaction.guildId,
 			result.poll.targetId,
 			result.poll.targetId,
@@ -320,11 +286,17 @@ async function handleVoteButton(
 	return true;
 }
 
-export default {
-	name: Events.InteractionCreate,
-	async execute(interaction: Interaction, context: AppContext) {
+export class InteractionCreateListener extends Listener {
+	public constructor(context: Listener.LoaderContext) {
+		super(context, {
+			event: "interactionCreate",
+			once: false,
+		});
+	}
+
+	public override async run(interaction: Interaction) {
 		if (interaction.isButton()) {
-			const handled = await handleVoteButton(interaction, context);
+			const handled = await handleVoteButton(interaction, this);
 			if (handled) {
 				return;
 			}
@@ -332,15 +304,11 @@ export default {
 
 		if (interaction.isModalSubmit()) {
 			if (interaction.customId === "settingsModal") {
-				await handleSettingsModal(interaction, context);
+				await handleSettingsModal(interaction, this);
 				return;
 			}
 
-			await handleFeedbackModal(interaction, context);
-			return;
+			await handleFeedbackModal(interaction, this);
 		}
-
-		if (!interaction.isChatInputCommand()) return;
-		await handleChatCommand(interaction, context);
-	},
-};
+	}
+}

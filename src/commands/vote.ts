@@ -1,7 +1,7 @@
 import {
 	type ChatInputCommandInteraction,
-	SlashCommandBuilder,
 } from "discord.js";
+import { ApplicationCommandRegistry, Command } from "@sapphire/framework";
 import { buildTrialVotePollEmbed } from "../services/embedBuilders.js";
 import {
 	GuildSettingsMissingError,
@@ -14,7 +14,6 @@ import {
 	buildTrialVoteButtons,
 	createTrialVotePoll,
 } from "../services/voteService.js";
-import type { AppContext } from "../types.js";
 
 async function getValidatedTarget(interaction: ChatInputCommandInteraction) {
 	const target = interaction.options.getUser("target");
@@ -44,11 +43,11 @@ async function getValidatedGuildContext(
 
 async function getSettingsOrReply(
 	interaction: ChatInputCommandInteraction,
-	context: AppContext,
+	command: Command,
 	guildId: string,
 ) {
 	try {
-		return await getGuildSettings(context.prisma, guildId);
+		return await getGuildSettings(command.container.prisma, guildId);
 	} catch (error) {
 		if (error instanceof GuildSettingsMissingError) {
 			await interaction.editReply({
@@ -67,17 +66,35 @@ async function getSettingsOrReply(
 	}
 }
 
-export default {
-	data: new SlashCommandBuilder()
-		.setName("vote")
-		.setDescription("Creates a trial vote poll in the officer channel")
-		.addUserOption((option) =>
-			option
-				.setName("target")
-				.setDescription("The user to vote on")
-				.setRequired(true),
-		),
-	async execute(interaction: ChatInputCommandInteraction, context: AppContext) {
+export class VoteCommand extends Command {
+	public constructor(context: Command.LoaderContext, options: Command.Options) {
+		super(context, {
+			...options,
+			name: "vote",
+			description: "Creates a trial vote poll in the officer channel",
+		});
+	}
+
+	public override registerApplicationCommands(
+		registry: ApplicationCommandRegistry,
+	) {
+		registry.registerChatInputCommand((builder) =>
+			builder
+				.setName(this.name)
+				.setDescription(this.description)
+				.addUserOption((option) =>
+					option
+						.setName("target")
+						.setDescription("The user to vote on")
+						.setRequired(true),
+				),
+			{ idHints: ["1507106764330631330"] },
+		);
+	}
+
+	public override async chatInputRun(
+		interaction: ChatInputCommandInteraction,
+	) {
 		await interaction.deferReply({ flags: ["Ephemeral"] });
 
 		const guildContext = await getValidatedGuildContext(interaction);
@@ -91,13 +108,13 @@ export default {
 			return;
 		}
 
-		const settings = await getSettingsOrReply(interaction, context, guildId);
+		const settings = await getSettingsOrReply(interaction, this, guildId);
 		if (!settings) {
 			return;
 		}
 
 		const pollResult = await createTrialVotePoll(
-			context.prisma,
+			this.container.prisma,
 			guildId,
 			target.id,
 			interaction.user.id,
@@ -110,14 +127,14 @@ export default {
 		}
 
 		const poll = pollResult.poll;
-		const logoUrl = context.client.user?.displayAvatarURL({
+		const logoUrl = this.container.client.user?.displayAvatarURL({
 			extension: "png",
 			size: 256,
 		});
 		const targetDisplayName =
 			poll.targetDisplayName ??
 			(await resolveGuildDisplayName(
-				context.client,
+				this.container.client,
 				guildId,
 				target.id,
 				target.displayName,
@@ -138,7 +155,7 @@ export default {
 		);
 
 		const sendResult = await sendOfficerChannelMessage(
-			context.client,
+			this.container.client,
 			settings.officerChannelId,
 			{
 				embeds: [embed],
@@ -155,7 +172,7 @@ export default {
 		}
 
 		const attached = await attachTrialVotePollMessage(
-			context.prisma,
+			this.container.prisma,
 			guildId,
 			poll.pollId,
 			sendResult.messageId,
@@ -169,5 +186,5 @@ export default {
 		await interaction.editReply({
 			content: "Posted vote poll in the officer channel.",
 		});
-	},
-};
+	}
+}

@@ -1,7 +1,7 @@
 import {
 	type ChatInputCommandInteraction,
-	SlashCommandBuilder,
 } from "discord.js";
+import { ApplicationCommandRegistry, Command } from "@sapphire/framework";
 import { buildTrialResolvedEmbed } from "../services/embedBuilders.js";
 import {
 	GuildSettingsMissingError,
@@ -18,7 +18,6 @@ import {
 	buildTrialVoteButtons,
 	closeTrialVotePoll,
 } from "../services/voteService.js";
-import type { AppContext } from "../types.js";
 
 async function getValidatedTarget(interaction: ChatInputCommandInteraction) {
 	const target = interaction.options.getUser("target");
@@ -52,11 +51,11 @@ async function getValidatedGuildContext(
 
 async function getSettingsOrReply(
 	interaction: ChatInputCommandInteraction,
-	context: AppContext,
+	command: Command,
 	guildId: string,
 ) {
 	try {
-		return await getGuildSettings(context.prisma, guildId);
+		return await getGuildSettings(command.container.prisma, guildId);
 	} catch (error) {
 		if (error instanceof GuildSettingsMissingError) {
 			await interaction.reply({
@@ -108,17 +107,35 @@ async function updateRolesOrReply(
 
 // Passing a trial should update the trial entry in the database, remove the trial role, add the raider role, and reply with a confirmation message.
 
-export default {
-	data: new SlashCommandBuilder()
-		.setName("pass")
-		.setDescription("Passes the trial")
-		.addUserOption((option) =>
-			option
-				.setName("target")
-				.setDescription("The user to pass the trial for")
-				.setRequired(true),
-		),
-	async execute(interaction: ChatInputCommandInteraction, context: AppContext) {
+export class PassCommand extends Command {
+	public constructor(context: Command.LoaderContext, options: Command.Options) {
+		super(context, {
+			...options,
+			name: "pass",
+			description: "Passes the trial",
+		});
+	}
+
+	public override registerApplicationCommands(
+		registry: ApplicationCommandRegistry,
+	) {
+		registry.registerChatInputCommand((builder) =>
+			builder
+				.setName(this.name)
+				.setDescription(this.description)
+				.addUserOption((option) =>
+					option
+						.setName("target")
+						.setDescription("The user to pass the trial for")
+						.setRequired(true),
+				),
+			{ idHints: ["1507106765685391470"] },
+		);
+	}
+
+	public override async chatInputRun(
+		interaction: ChatInputCommandInteraction,
+	) {
 		const guildContext = await getValidatedGuildContext(interaction);
 		if (!guildContext) {
 			return;
@@ -132,7 +149,7 @@ export default {
 			return;
 		}
 
-		const settings = await getSettingsOrReply(interaction, context, guildId);
+		const settings = await getSettingsOrReply(interaction, this, guildId);
 		if (!settings) {
 			return;
 		}
@@ -142,7 +159,7 @@ export default {
 
 		try {
 			const result = await resolveTrial(
-				context.prisma,
+				this.container.prisma,
 				guildId,
 				target.id,
 				true,
@@ -171,13 +188,13 @@ export default {
 
 			if (result.trialId) {
 				const closeResult = await closeTrialVotePoll(
-					context.prisma,
+					this.container.prisma,
 					guildId,
 					result.trialId,
 				);
 				if (closeResult.closed && closeResult.messageId) {
 					try {
-						const channel = await context.client.channels.fetch(
+						const channel = await this.container.client.channels.fetch(
 							settings.officerChannelId,
 						);
 						if (channel?.isTextBased()) {
@@ -218,13 +235,13 @@ export default {
 		const displayName =
 			trialDisplayName ??
 			(await resolveGuildDisplayName(
-				context.client,
+				this.container.client,
 				guildId,
 				target.id,
 				target.displayName,
 			));
 		const officerDisplayName = await resolveGuildDisplayName(
-			context.client,
+			this.container.client,
 			guildId,
 			interaction.user.id,
 			interaction.user.username,
@@ -236,7 +253,7 @@ export default {
 					settings.raidAttendanceReminderThreshold,
 				)
 			: null;
-		const logoUrl = context.client.user?.displayAvatarURL({
+		const logoUrl = this.container.client.user?.displayAvatarURL({
 			extension: "png",
 			size: 256,
 		});
@@ -253,7 +270,7 @@ export default {
 			logoUrl,
 		);
 		const sendResult = await sendOfficerChannelMessage(
-			context.client,
+			this.container.client,
 			settings.officerChannelId,
 			{
 				embeds: [embed.toJSON()],
@@ -273,5 +290,5 @@ export default {
 			content: "Posted pass update in the officer channel.",
 			flags: ["Ephemeral"],
 		});
-	},
-};
+	}
+}

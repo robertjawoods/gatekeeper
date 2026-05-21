@@ -4,13 +4,12 @@ import {
 	LabelBuilder,
 	ModalBuilder,
 	RoleSelectMenuBuilder,
-	SlashCommandBuilder,
 	TextInputBuilder,
 	TextInputStyle,
 } from "discord.js";
+import { ApplicationCommandRegistry, Command } from "@sapphire/framework";
 import { findGuildSettings } from "../services/guildSettings.js";
 import { createGuildLogger } from "../services/logger.js";
-import type { AppContext } from "../types.js";
 
 /* 
      trialRoleId String
@@ -19,13 +18,27 @@ import type { AppContext } from "../types.js";
      
 */
 
-export default {
-	data: new SlashCommandBuilder()
-		.setName("settings")
-		.setDescription(
-			"Allows moderators to adjust settings for the trial tracker",
-		),
-	async execute(interaction: ChatInputCommandInteraction, context: AppContext) {
+export class SettingsCommand extends Command {
+	public constructor(context: Command.LoaderContext, options: Command.Options) {
+		super(context, {
+			...options,
+			name: "settings",
+			description: "Allows moderators to adjust settings for the trial tracker",
+		});
+	}
+
+	public override registerApplicationCommands(
+		registry: ApplicationCommandRegistry,
+	) {
+		registry.registerChatInputCommand((builder) =>
+			builder.setName(this.name).setDescription(this.description),
+			{ idHints: ["1507106679014297761"] },
+		);
+	}
+
+	public override async chatInputRun(
+		interaction: ChatInputCommandInteraction,
+	) {
 		const guildId = interaction.guildId;
 
 		if (!guildId) {
@@ -36,7 +49,7 @@ export default {
 			return;
 		}
 
-		const settings = await findGuildSettings(context.prisma, guildId);
+		const settings = await findGuildSettings(this.container.prisma, guildId);
 
 		createGuildLogger(guildId).info(
 			{ userId: interaction.user.id },
@@ -114,5 +127,5 @@ export default {
 		);
 
 		await interaction.showModal(modal);
-	},
-};
+	}
+}

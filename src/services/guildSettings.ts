@@ -1,8 +1,9 @@
 import type { MessageCreateOptions } from "discord.js";
 import cron from "node-cron";
-import type { DiscordClient } from "../DiscordClient.js";
-import type { PrismaClient, Settings } from "../generated/prisma/client.js";
 import { logger } from "./logger.js";
+import type { SapphireClient } from "@sapphire/framework";
+import type { PrismaClient } from "@prisma/client/extension";
+import type { Settings } from "../generated/prisma/client.js";
 
 export class GuildSettingsMissingError extends Error {
 	constructor(guildId: string) {
@@ -142,7 +143,7 @@ export type OfficerChannelMessagePayload =
 	| Pick<MessageCreateOptions, "content" | "embeds" | "components">;
 
 export async function sendOfficerChannelMessage(
-	client: DiscordClient,
+	client: SapphireClient,
 	officerChannelId: string,
 	payload: OfficerChannelMessagePayload,
 ): Promise<OfficerChannelMessageResult> {
@@ -178,7 +179,7 @@ export async function sendOfficerChannelMessage(
 }
 
 export async function resolveGuildDisplayName(
-	client: DiscordClient,
+	client: SapphireClient,
 	guildId: string,
 	userId: string,
 	fallbackName: string,

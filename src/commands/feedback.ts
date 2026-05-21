@@ -3,15 +3,14 @@ import {
 	CheckboxBuilder,
 	LabelBuilder,
 	ModalBuilder,
-	SlashCommandBuilder,
 	TextInputBuilder,
 	TextInputStyle,
 } from "discord.js";
+import { ApplicationCommandRegistry, Command } from "@sapphire/framework";
 import { buildFeedbackModalCustomId } from "../services/feedbackService.js";
 import { resolveGuildDisplayName } from "../services/guildSettings.js";
 import { createGuildLogger } from "../services/logger.js";
 import { findActiveTrial } from "../services/trialService.js";
-import type { AppContext } from "../types.js";
 
 /* 
     This form collects feedback from officers about a trial's performance 
@@ -35,19 +34,35 @@ import type { AppContext } from "../types.js";
      
 */
 
-export default {
-	data: new SlashCommandBuilder()
-		.setName("feedback")
-		.setDescription(
-			"Provides a feedback form for users to submit their feedback.",
-		)
-		.addUserOption((option) =>
-			option
-				.setName("target")
-				.setDescription("The user to provide feedback for")
-				.setRequired(true),
-		),
-	async execute(interaction: ChatInputCommandInteraction, context: AppContext) {
+export class FeedbackCommand extends Command {
+	public constructor(context: Command.LoaderContext, options: Command.Options) {
+		super(context, {
+			...options,
+			name: "feedback",
+			description: "Provides a feedback form for users to submit their feedback.",
+		});
+	}
+
+	public override registerApplicationCommands(
+		registry: ApplicationCommandRegistry,
+	) {
+		registry.registerChatInputCommand((builder) =>
+			builder
+				.setName(this.name)
+				.setDescription(this.description)
+				.addUserOption((option) =>
+					option
+						.setName("target")
+						.setDescription("The user to provide feedback for")
+						.setRequired(true),
+				),
+			{ idHints: ["1507106768046657608"] },
+		);
+	}
+
+	public override async chatInputRun(
+		interaction: ChatInputCommandInteraction,
+	) {
 		const target = interaction.options.getUser("target");
 
 		if (!interaction.guildId) {
@@ -67,7 +82,7 @@ export default {
 		}
 
 		const activeTrial = await findActiveTrial(
-			context.prisma,
+			this.container.prisma,
 			interaction.guildId,
 			target.id,
 		);
@@ -95,7 +110,7 @@ export default {
 		const displayName =
 			activeTrial.userDisplayName ??
 			(await resolveGuildDisplayName(
-				context.client,
+				this.container.client,
 				interaction.guildId,
 				target.id,
 				target.displayName,
@@ -162,5 +177,5 @@ export default {
 		// needs components to work
 
 		await interaction.showModal(modal);
-	},
-};
+	}
+}

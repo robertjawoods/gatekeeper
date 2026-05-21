@@ -1,78 +1,49 @@
 import {
 	type ChatInputCommandInteraction,
+	MessageFlags,
 	SlashCommandBuilder,
 } from "discord.js";
-import {
-	GuildSettingsMissingError,
-	getGuildSettings,
-	sendOfficerChannelMessage,
-} from "../services/guildSettings.js";
-import { createGuildLogger } from "../services/logger.js";
-import type { AppContext } from "../types.js";
 
-export default {
-	data: new SlashCommandBuilder()
-		.setName("ping")
-		.setDescription("Replies with Pong!"),
-	async execute(interaction: ChatInputCommandInteraction, context: AppContext) {
-		const guildId = interaction.guildId;
+import { ApplicationCommandRegistry, Command } from "@sapphire/framework";
+import { isMessageInstance } from '@sapphire/discord.js-utilities';
 
-		if (!guildId) {
-			await interaction.reply({
-				content: "This command can only be used in a server.",
-				flags: ["Ephemeral"],
-			});
-			return;
-		}
 
-		let settings: Awaited<ReturnType<typeof getGuildSettings>>;
-
-		try {
-			settings = await getGuildSettings(context.prisma, guildId);
-		} catch (error) {
-			if (error instanceof GuildSettingsMissingError) {
-				await interaction.reply({
-					content:
-						"Server settings have not been configured yet. Run `/settings` first.",
-					flags: ["Ephemeral"],
-				});
-				return;
-			}
-
-			createGuildLogger(guildId).error(
-				{ err: error },
-				"Error retrieving guild settings.",
-			);
-			await interaction.reply({
-				content:
-					"An error occurred while retrieving server settings. Please try again later.",
-				flags: ["Ephemeral"],
-			});
-			return;
-		}
-
-		const sendResult = await sendOfficerChannelMessage(
-			context.client,
-			settings.officerChannelId,
-			"Pong!",
-		);
-
-		if (!sendResult.delivered) {
-			createGuildLogger(guildId).warn(
-				{ reason: sendResult.reason },
-				"Ping: failed to deliver to officer channel.",
-			);
-			await interaction.reply({
-				content:
-					"I could not send the ping response to the officer channel. Please check channel settings and permissions.",
-				flags: ["Ephemeral"],
-			});
-			return;
-		}
-
-		await interaction.reply({
-			content: "Posted ping response in the officer channel.",
-			flags: ["Ephemeral"],
+export class PingCommand extends Command {
+	public constructor(context: Command.LoaderContext, options: Command.Options) {
+		super(context, {
+			...options,
+			name: "ping",
+			description: "Replies with Pong!",
 		});
-	},
-};
+	}
+
+	public override registerApplicationCommands(registry: ApplicationCommandRegistry) {
+		// registry is unique to this command
+		registry.registerChatInputCommand(
+			(builder) =>
+				builder
+					.setName(this.name)
+					.setDescription(this.description),
+			{ idHints: ["1506975875420262421", "1507106675646271640"] },
+		);
+	}
+
+	public override async chatInputRun(interaction: ChatInputCommandInteraction) {
+		const callbackResponse = await interaction.reply({
+			content: `Ping?`,
+			withResponse: true,
+			flags: MessageFlags.Ephemeral
+		});
+		const msg = callbackResponse.resource?.message;
+
+		if (msg && isMessageInstance(msg)) {
+			const diff = msg.createdTimestamp - interaction.createdTimestamp;
+			const ping = Math.round(this.container.client.ws.ping);
+			return interaction.editReply(`Pong 🏓! (Round trip took: ${diff}ms. Heartbeat: ${ping}ms.)`);
+		}
+
+		return interaction.editReply('Failed to retrieve ping :(');
+
+	}
+
+}

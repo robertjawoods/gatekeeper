@@ -1,17 +1,25 @@
 import { GatewayIntentBits } from "discord.js";
-import { DiscordClient } from "./DiscordClient.js";
 import { prisma } from "./prisma.js";
 import { logger } from "./services/logger.js";
+import { LogLevel, SapphireClient, container } from "@sapphire/framework";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 logger.info({ env: process.env.NODE_ENV ?? "development" }, "Starting bot...");
 
-const client: DiscordClient = new DiscordClient(
-	{ intents: [GatewayIntentBits.Guilds] },
-	prisma,
-);
 
-await client.loadCommands();
-await client.loadEvents();
+const client = new SapphireClient({
+	intents: [GatewayIntentBits.Guilds],
+	logger: {
+		level: LogLevel[process.env.LOG_LEVEL?.toUpperCase() as keyof typeof LogLevel] ?? LogLevel.Info,
+	},
+});
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+container.prisma = prisma;
+client.stores.get("listeners").registerPath(path.join(__dirname, "events"));
 
 const token = process.env.DISCORD_TOKEN;
 

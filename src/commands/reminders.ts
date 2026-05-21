@@ -1,25 +1,42 @@
 import {
 	type ChatInputCommandInteraction,
 	PermissionFlagsBits,
-	SlashCommandBuilder,
 } from "discord.js";
+import { ApplicationCommandRegistry, Command } from "@sapphire/framework";
 import { runGuildRaidAttendanceReminderCycle } from "../services/raidAttendanceReminderService.js";
-import type { AppContext } from "../types.js";
 
-export default {
-	data: new SlashCommandBuilder()
-		.setName("reminders")
-		.setDescription("Admin tools for raid attendance reminders")
-		.setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-		.setDMPermission(false)
-		.addSubcommand((subcommand) =>
-			subcommand
-				.setName("run-now")
-				.setDescription(
-					"Runs the raid attendance reminder cycle for this server immediately",
+export class RemindersCommand extends Command {
+	public constructor(context: Command.LoaderContext, options: Command.Options) {
+		super(context, {
+			...options,
+			name: "reminders",
+			description: "Admin tools for raid attendance reminders",
+		});
+	}
+
+	public override registerApplicationCommands(
+		registry: ApplicationCommandRegistry,
+	) {
+		registry.registerChatInputCommand((builder) =>
+			builder
+				.setName(this.name)
+				.setDescription(this.description)
+				.setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+				.setDMPermission(false)
+				.addSubcommand((subcommand) =>
+					subcommand
+						.setName("run-now")
+						.setDescription(
+							"Runs the raid attendance reminder cycle for this server immediately",
+						),
 				),
-		),
-	async execute(interaction: ChatInputCommandInteraction, context: AppContext) {
+			{ idHints: ["1506975876255060102", "1507106677206548624"] },
+		);
+	}
+
+	public override async chatInputRun(
+		interaction: ChatInputCommandInteraction,
+	) {
 		if (!interaction.guildId) {
 			await interaction.reply({
 				content: "This command can only be used in a server.",
@@ -31,7 +48,7 @@ export default {
 		await interaction.deferReply({ flags: ["Ephemeral"] });
 
 		const result = await runGuildRaidAttendanceReminderCycle(
-			context,
+			{ prisma: this.container.prisma, client: this.container.client },
 			interaction.guildId,
 		);
 
@@ -54,5 +71,5 @@ export default {
 				`Delivery failures: ${result.deliveryFailures}`,
 			].join("\n"),
 		});
-	},
-};
+	}
+}

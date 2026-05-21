@@ -14,7 +14,7 @@ import {
 	projectTrialExpectedEndDate,
 	startTrial,
 } from "../services/trialService.js";
-import type { AppContext } from "../types.js";
+import { ApplicationCommandRegistry, Command } from "@sapphire/framework";
 
 async function getValidatedTarget(interaction: ChatInputCommandInteraction) {
 	const target = interaction.options.getUser("target");
@@ -48,11 +48,11 @@ async function getValidatedGuildContext(
 
 async function getSettingsOrReply(
 	interaction: ChatInputCommandInteraction,
-	context: AppContext,
+	prisma: Parameters<typeof getGuildSettings>[0],
 	guildId: string,
 ) {
 	try {
-		return await getGuildSettings(context.prisma, guildId);
+		return await getGuildSettings(prisma, guildId);
 	} catch (error) {
 		if (error instanceof GuildSettingsMissingError) {
 			await interaction.reply({
@@ -105,17 +105,40 @@ async function addTrialRoleOrReply(
 // It should check if the user already has an active trial and prevent starting a new one if they do.
 // The trial entry should include the user who started the trial, the start time, and any other relevant information.
 
-export default {
-	data: new SlashCommandBuilder()
-		.setName("start")
-		.setDescription("Starts the trial")
-		.addUserOption((option) =>
-			option
-				.setName("target")
-				.setDescription("The user to start the trial for")
-				.setRequired(true),
-		),
-	async execute(interaction: ChatInputCommandInteraction, context: AppContext) {
+
+export class StartCommand extends Command {
+	public constructor(context: Command.LoaderContext, options: Command.Options) {
+		super(context, {
+			...options,
+			name: "start",
+			description: "Starts the trial for a user.",
+		});
+	}
+
+	public override registerApplicationCommands(registry: ApplicationCommandRegistry) {
+		registry.registerChatInputCommand((builder) =>
+			builder
+				.setName(this.name)
+				.setDescription(this.description)
+				.addUserOption((option) =>
+					option
+						.setName("target")
+						.setDescription("The user to start the trial for")
+						.setRequired(true),
+				),
+			{ idHints: ["1506975873704660992", "1507106674631114873"] },
+		);
+	}
+
+	public override async chatInputRun(
+		interaction: ChatInputCommandInteraction,
+	) {
+		const client = this.container.client;
+		const messageClient = client as Parameters<
+			typeof sendOfficerChannelMessage
+		>[0];
+		const prisma = this.container.prisma;
+
 		const guildContext = await getValidatedGuildContext(interaction);
 		if (!guildContext) {
 			return;
@@ -129,19 +152,19 @@ export default {
 			return;
 		}
 
-		const settings = await getSettingsOrReply(interaction, context, guildId);
+		const settings = await getSettingsOrReply(interaction, prisma, guildId);
 		if (!settings) {
 			return;
 		}
 
 		const targetDisplayNameSnapshot = await resolveGuildDisplayName(
-			context.client,
+			client,
 			guildId,
 			target.id,
 			target.displayName,
 		);
 		const officerDisplayNameSnapshot = await resolveGuildDisplayName(
-			context.client,
+			client,
 			guildId,
 			interaction.user.id,
 			interaction.user.username,
@@ -151,7 +174,7 @@ export default {
 
 		try {
 			const result = await startTrial(
-				context.prisma,
+				prisma,
 				guildId,
 				target.id,
 				interaction.user.id,
@@ -204,12 +227,12 @@ export default {
 		const officerDisplayName = officerDisplayNameSnapshot;
 		const projectedEndDate = createdTrialStartTime
 			? projectTrialExpectedEndDate(
-					createdTrialStartTime,
-					settings.raidScheduleCron,
-					settings.raidAttendanceReminderThreshold,
-				)
+				createdTrialStartTime,
+				settings.raidScheduleCron,
+				settings.raidAttendanceReminderThreshold,
+			)
 			: null;
-		const logoUrl = context.client.user?.displayAvatarURL({
+		const logoUrl = client.user?.displayAvatarURL({
 			extension: "png",
 			size: 256,
 		});
@@ -225,7 +248,7 @@ export default {
 			logoUrl,
 		);
 		const sendResult = await sendOfficerChannelMessage(
-			context.client,
+			messageClient,
 			settings.officerChannelId,
 			{
 				embeds: [embed.toJSON()],
@@ -245,5 +268,5 @@ export default {
 			content: "Posted start update in the officer channel.",
 			flags: ["Ephemeral"],
 		});
-	},
-};
+	}
+}

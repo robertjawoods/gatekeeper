@@ -1,10 +1,18 @@
-import fs from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { REST, Routes } from "discord.js";
+import { fileURLToPath } from "node:url";
+import {
+	ApplicationCommandRegistries,
+	Events as SapphireEvents,
+	SapphireClient,
+	container,
+} from "@sapphire/framework";
+import { GatewayIntentBits } from "discord.js";
+import { prisma } from "./src/prisma.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+process.env.SKIP_SCHEDULER_BOOTSTRAP = "1";
 
 const token = process.env.DISCORD_TOKEN;
 
@@ -27,40 +35,37 @@ if (!clientId) {
 	process.exit(1);
 }
 
-const commandsPath = path.join(__dirname, "src", "commands");
-const commandFiles = (await fs.readdir(commandsPath)).filter(
-	(file) => file.endsWith(".ts") || file.endsWith(".js"),
+ApplicationCommandRegistries.setDefaultGuildIds([guildId]);
+
+const client = new SapphireClient({
+	intents: [GatewayIntentBits.Guilds],
+	id: clientId,
+});
+
+container.prisma = prisma;
+client.stores.get("listeners").registerPath(path.join(__dirname, "src", "events"));
+
+client.once(
+	SapphireEvents.ApplicationCommandRegistriesRegistered,
+	async (registries, timeTaken) => {
+		console.log(
+			`Successfully registered ${registries.size} command registries for guild ${guildId} in ${Math.round(timeTaken)}ms.`,
+		);
+		await client.destroy();
+		await prisma.$disconnect();
+		process.exit(0);
+	},
 );
 
-const commands = [];
+client.once(SapphireEvents.ApplicationCommandRegistriesBulkOverwriteError, async (error) => {
+	console.error("Bulk overwrite command registration failed:", error);
+	await client.destroy();
+	await prisma.$disconnect();
+	process.exit(1);
+});
 
-for (const file of commandFiles) {
-	const filePath = path.join(commandsPath, file);
-	const commandModule = await import(pathToFileURL(filePath).href);
-
-	const command = commandModule.default ?? commandModule;
-	if ("data" in command && "execute" in command) {
-		commands.push(command.data.toJSON());
-	} else {
-		console.warn(
-			`[WARNING] The command at ${filePath} is missing a required "data" or "execute" property.`,
-		);
-	}
-}
-
-const rest = new REST().setToken(token);
-
-try {
-	console.log(
-		`Started refreshing ${commands.length} guild application (/) commands for guild ${guildId}.`,
-	);
-	const data = (await rest.put(
-		Routes.applicationGuildCommands(clientId, guildId),
-		{ body: commands },
-	)) as Array<unknown>;
-	console.log(
-		`Successfully reloaded ${data.length} guild application (/) commands.`,
-	);
-} catch (error) {
-	console.error(error);
-}
+await client.login(token).catch(async (error) => {
+	console.error("Failed to login for command deployment:", error);
+	await prisma.$disconnect();
+	process.exit(1);
+});

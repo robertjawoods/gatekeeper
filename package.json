@@ -2,7 +2,7 @@
 	"name": "trial-tracker",
 	"version": "1.0.0",
 	"description": "",
-	"main": "index.js",
+	"main": "src/index.ts",
 	"type": "module",
 	"scripts": {
 		"start": "tsx ./src/index.ts",
@@ -31,8 +31,10 @@
 	"dependencies": {
 		"@prisma/adapter-pg": "^7.8.0",
 		"@prisma/client": "^7.8.0",
+		"@sapphire/discord.js-utilities": "^7.3.3",
+		"@sapphire/framework": "^5.5.0",
 		"cron-parser": "^5.5.0",
-		"discord.js": "^14.26.4",
+		"discord.js": "14.x",
 		"node-cron": "^4.2.1",
 		"pg": "^8.20.0",
 		"pino": "^10.3.1",

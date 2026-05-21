@@ -1,7 +1,7 @@
 import {
 	type ChatInputCommandInteraction,
-	SlashCommandBuilder,
 } from "discord.js";
+import { ApplicationCommandRegistry, Command } from "@sapphire/framework";
 import { buildFeedbackSummaryEmbed } from "../services/embedBuilders.js";
 import { getMemberFeedbackSummary } from "../services/feedbackService.js";
 import {
@@ -12,19 +12,36 @@ import {
 } from "../services/guildSettings.js";
 import { createGuildLogger } from "../services/logger.js";
 import { projectTrialExpectedEndDate } from "../services/trialService.js";
-import type { AppContext } from "../types.js";
 
-export default {
-	data: new SlashCommandBuilder()
-		.setName("summary")
-		.setDescription("Shows trial feedback summary for a member")
-		.addUserOption((option) =>
-			option
-				.setName("member")
-				.setDescription("The member to summarize feedback for")
-				.setRequired(true),
-		),
-	async execute(interaction: ChatInputCommandInteraction, context: AppContext) {
+export class SummaryCommand extends Command {
+	public constructor(context: Command.LoaderContext, options: Command.Options) {
+		super(context, {
+			...options,
+			name: "summary",
+			description: "Shows trial feedback summary for a member",
+		});
+	}
+
+	public override registerApplicationCommands(
+		registry: ApplicationCommandRegistry,
+	) {
+		registry.registerChatInputCommand((builder) =>
+			builder
+				.setName(this.name)
+				.setDescription(this.description)
+				.addUserOption((option) =>
+					option
+						.setName("member")
+						.setDescription("The member to summarize feedback for")
+						.setRequired(true),
+				),
+			{ idHints: ["1507106762896052334"] },
+		);
+	}
+
+	public override async chatInputRun(
+		interaction: ChatInputCommandInteraction,
+	) {
 		const guildId = interaction.guildId;
 
 		if (!guildId) {
@@ -38,7 +55,7 @@ export default {
 		let settings: Awaited<ReturnType<typeof getGuildSettings>>;
 
 		try {
-			settings = await getGuildSettings(context.prisma, guildId);
+			settings = await getGuildSettings(this.container.prisma, guildId);
 		} catch (error) {
 			if (error instanceof GuildSettingsMissingError) {
 				await interaction.reply({
@@ -72,7 +89,7 @@ export default {
 
 		try {
 			const result = await getMemberFeedbackSummary(
-				context.prisma,
+				this.container.prisma,
 				guildId,
 				member.id,
 			);
@@ -80,7 +97,7 @@ export default {
 				result.outcome === "no_feedback" && result.userDisplayName
 					? result.userDisplayName
 					: await resolveGuildDisplayName(
-							context.client,
+							this.container.client,
 							guildId,
 							member.id,
 							member.displayName,
@@ -117,7 +134,7 @@ export default {
 							settings.raidScheduleCron,
 							settings.raidAttendanceReminderThreshold,
 						);
-			const logoUrl = context.client.user?.displayAvatarURL({
+			const logoUrl = this.container.client.user?.displayAvatarURL({
 				extension: "png",
 				size: 256,
 			});
@@ -129,7 +146,7 @@ export default {
 			);
 
 			const sendResult = await sendOfficerChannelMessage(
-				context.client,
+				this.container.client,
 				settings.officerChannelId,
 				{
 					embeds: [embed.toJSON()],
@@ -160,5 +177,5 @@ export default {
 				flags: ["Ephemeral"],
 			});
 		}
-	},
-};
+	}
+}

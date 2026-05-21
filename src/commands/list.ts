@@ -2,8 +2,8 @@
 
 import {
 	type ChatInputCommandInteraction,
-	SlashCommandBuilder,
 } from "discord.js";
+import { ApplicationCommandRegistry, Command } from "@sapphire/framework";
 import {
 	buildTrialListEmbeds,
 	type TrialListItem,
@@ -16,7 +16,6 @@ import {
 } from "../services/guildSettings.js";
 import { createGuildLogger } from "../services/logger.js";
 import { listTrials } from "../services/trialService.js";
-import type { AppContext } from "../types.js";
 
 /*
 The list command should retrieve trial entries from the database and display them in a user-friendly format. 
@@ -24,17 +23,34 @@ It should support an optional argument to filter by active or inactive trials, d
 The displayed information should include the user on trial, the start time, the status of the trial, and any other relevant details.
 */
 
-export default {
-	data: new SlashCommandBuilder()
-		.setName("list")
-		.setDescription("Lists all trials")
-		.addBooleanOption((option) =>
-			option
-				.setName("active")
-				.setDescription("Whether to list only active trials")
-				.setRequired(false),
-		),
-	async execute(interaction: ChatInputCommandInteraction, context: AppContext) {
+export class ListCommand extends Command {
+	public constructor(context: Command.LoaderContext, options: Command.Options) {
+		super(context, {
+			...options,
+			name: "list",
+			description: "Lists all trials",
+		});
+	}
+
+	public override registerApplicationCommands(
+		registry: ApplicationCommandRegistry,
+	) {
+		registry.registerChatInputCommand((builder) =>
+			builder
+				.setName(this.name)
+				.setDescription(this.description)
+				.addBooleanOption((option) =>
+					option
+						.setName("active")
+						.setDescription("Whether to list only active trials")
+						.setRequired(false),
+				),
+		);
+	}
+
+	public override async chatInputRun(
+		interaction: ChatInputCommandInteraction,
+	) {
 		const activeOnly = interaction.options.getBoolean("active") ?? true;
 		const guildId = interaction.guildId;
 
@@ -50,7 +66,7 @@ export default {
 		const log = createGuildLogger(guildId);
 
 		try {
-			settings = await getGuildSettings(context.prisma, guildId);
+			settings = await getGuildSettings(this.container.prisma, guildId);
 		} catch (error) {
 			if (error instanceof GuildSettingsMissingError) {
 				await interaction.reply({
@@ -71,13 +87,13 @@ export default {
 		}
 
 		try {
-			const trials = await listTrials(context.prisma, guildId, activeOnly);
+			const trials = await listTrials(this.container.prisma, guildId, activeOnly);
 			if (trials.length === 0) {
 				log.info({ activeOnly }, "No trials found for listing.");
 			} else {
 				log.info({ activeOnly, count: trials.length }, "Listing trials.");
 			}
-			const logoUrl = context.client.user?.displayAvatarURL({
+			const logoUrl = this.container.client.user?.displayAvatarURL({
 				extension: "png",
 				size: 256,
 			});
@@ -91,7 +107,7 @@ export default {
 					const displayName =
 						trial.userDisplayName ??
 						(await resolveGuildDisplayName(
-							context.client,
+							this.container.client,
 							guildId,
 							trial.userId,
 							trial.userId,
@@ -109,7 +125,7 @@ export default {
 			);
 
 			const sendResult = await sendOfficerChannelMessage(
-				context.client,
+				this.container.client,
 				settings.officerChannelId,
 				{ embeds },
 			);
@@ -135,5 +151,5 @@ export default {
 				flags: ["Ephemeral"],
 			});
 		}
-	},
-};
+	}
+}

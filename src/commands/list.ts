@@ -27,6 +27,7 @@ export class ListCommand extends Command {
 			...options,
 			name: "list",
 			description: "Lists all trials",
+			preconditions: ["OfficerOnly"],
 		});
 	}
 
@@ -58,6 +59,8 @@ export class ListCommand extends Command {
 			return;
 		}
 
+		await interaction.deferReply({ flags: ["Ephemeral"] });
+
 		let settings: Awaited<ReturnType<typeof getGuildSettings>>;
 		const log = createGuildLogger(guildId);
 
@@ -65,19 +68,17 @@ export class ListCommand extends Command {
 			settings = await getGuildSettings(this.container.prisma, guildId);
 		} catch (error) {
 			if (error instanceof GuildSettingsMissingError) {
-				await interaction.reply({
+				await interaction.editReply({
 					content:
 						"Server settings have not been configured yet. Run `/settings` first.",
-					flags: ["Ephemeral"],
 				});
 				return;
 			}
 
 			log.error({ err: error }, "Error retrieving guild settings.");
-			await interaction.reply({
+			await interaction.editReply({
 				content:
 					"An error occurred while retrieving server settings. Please try again later.",
-				flags: ["Ephemeral"],
 			});
 			return;
 		}
@@ -131,24 +132,21 @@ export class ListCommand extends Command {
 			);
 
 			if (!sendResult.delivered) {
-				await interaction.reply({
+				await interaction.editReply({
 					content:
 						"I could not send the trial list to the officer channel. Please check channel settings and permissions.",
-					flags: ["Ephemeral"],
 				});
 				return;
 			}
 
-			await interaction.reply({
+			await interaction.editReply({
 				content: "Posted the trial list in the officer channel.",
-				flags: ["Ephemeral"],
 			});
 		} catch (error) {
 			log.error({ err: error }, "Error retrieving trials.");
-			await interaction.reply({
+			await interaction.editReply({
 				content:
 					"An error occurred while retrieving trials. Please try again later.",
-				flags: ["Ephemeral"],
 			});
 		}
 	}

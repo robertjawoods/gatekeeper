@@ -11,6 +11,7 @@ export class RemindersCommand extends Command {
 			...options,
 			name: "reminders",
 			description: "Admin tools for raid attendance reminders",
+			preconditions: ["OfficerOnly"],
 		});
 	}
 

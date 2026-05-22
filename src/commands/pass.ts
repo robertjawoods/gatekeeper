@@ -119,6 +119,7 @@ export class PassCommand extends Command {
 			...options,
 			name: "pass",
 			description: "Passes the trial",
+			preconditions: ["OfficerOnly"],
 		});
 	}
 

@@ -32,6 +32,7 @@ export class FailCommand extends Command {
 			...options,
 			name: "fail",
 			description: "Fails the trial",
+			preconditions: ["OfficerOnly"],
 		});
 	}
 

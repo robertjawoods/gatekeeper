@@ -26,6 +26,7 @@ export class SummaryCommand extends Command {
 			...options,
 			name: "summary",
 			description: "Shows trial feedback summary for a member",
+			preconditions: ["OfficerOnly"],
 		});
 	}
 

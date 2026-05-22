@@ -67,6 +67,7 @@ export class VoteCommand extends Command {
 			...options,
 			name: "vote",
 			description: "Creates a trial vote poll in the officer channel",
+			preconditions: ["OfficerOnly"],
 		});
 	}
 

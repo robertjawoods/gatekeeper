@@ -22,6 +22,7 @@ import {
 	parseVoteCustomId,
 	recordTrialVote,
 } from "../services/voteService.js";
+import { findActiveTrial } from "../services/trialService.js";
 
 async function handleSettingsModal(
 	interaction: ModalSubmitInteraction,
@@ -127,6 +128,8 @@ async function handleFeedbackModal(
 		return;
 	}
 
+	await interaction.deferReply({ flags: ["Ephemeral"] });
+
 	const performance = Number(
 		interaction.fields.getTextInputValue("performance"),
 	);
@@ -140,17 +143,29 @@ async function handleFeedbackModal(
 		(value) => Number.isInteger(value) && value >= 1 && value <= 5,
 	);
 	if (!areScoresValid) {
-		await interaction.reply({
+		await interaction.editReply({
 			content:
 				"Performance, attitude, and focus must be whole numbers from 1 to 5.",
-			flags: ["Ephemeral"],
+		});
+		return;
+	}
+
+	const activeTrial = await findActiveTrial(
+		listener.container.prisma,
+		interaction.guildId,
+		feedbackContext.targetId,
+	);
+
+	if (!activeTrial) {
+		await interaction.editReply({
+			content: "This user no longer has an active trial. Feedback was not saved.",
 		});
 		return;
 	}
 
 	const result = await createFeedback(listener.container.prisma, {
 		guildId: interaction.guildId,
-		trialId: feedbackContext.trialId,
+		trialId: activeTrial.id,
 		targetId: feedbackContext.targetId,
 		officerId: interaction.user.id,
 		performance,
@@ -169,25 +184,24 @@ async function handleFeedbackModal(
 		logger.warn(
 			{
 				guildId: interaction.guildId,
-				trialId: feedbackContext.trialId,
+				trialId: activeTrial.id,
 				officerId: interaction.user.id,
 				reason: result.reason,
 			},
 			"Feedback submission rejected.",
 		);
 
-		await interaction.reply({ content, flags: ["Ephemeral"] });
+		await interaction.editReply({ content });
 		return;
 	}
 
 	audit(interaction.guildId, "feedback.submitted", interaction.user.id, {
-		trialId: feedbackContext.trialId,
+		trialId: activeTrial.id,
 		targetId: feedbackContext.targetId,
 	});
 
-	await interaction.reply({
+	await interaction.editReply({
 		content: "Feedback received and saved. Thank you!",
-		flags: ["Ephemeral"],
 	});
 }
 async function handleVoteButton(

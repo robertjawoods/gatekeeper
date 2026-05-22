@@ -43,6 +43,7 @@ export class RoledebugCommand extends Command {
 			...options,
 			name: "roledebug",
 			description: "Diagnose role visibility/manageability issues for settings",
+			preconditions: ["OfficerOnly"],
 		});
 	}
 

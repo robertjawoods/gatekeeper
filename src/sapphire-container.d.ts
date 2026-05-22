@@ -4,4 +4,8 @@ declare module "@sapphire/framework" {
 	interface Container {
 		prisma: PrismaClient;
 	}
+
+	interface Preconditions { 
+		OfficerOnly: never;
+	}
 }

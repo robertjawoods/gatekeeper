@@ -9,6 +9,7 @@ export class PingCommand extends Command {
 			...options,
 			name: "ping",
 			description: "Replies with Pong!",
+			preconditions: ['OfficerOnly'], // only available to officers
 		});
 	}
 

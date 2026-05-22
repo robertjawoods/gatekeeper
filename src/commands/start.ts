@@ -116,6 +116,7 @@ export class StartCommand extends Command {
 			...options,
 			name: "start",
 			description: "Starts the trial for a user.",
+			preconditions: ["OfficerOnly"],
 		});
 	}
 

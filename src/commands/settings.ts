@@ -23,7 +23,8 @@ export class SettingsCommand extends Command {
 		super(context, {
 			...options,
 			name: "settings",
-			description: "Allows moderators to adjust settings for the trial tracker",
+			description: "Allows officers to adjust settings for the trial tracker",
+			preconditions: ["OfficerOnly"],
 		});
 	}
 

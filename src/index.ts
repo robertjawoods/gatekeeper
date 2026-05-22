@@ -1,11 +1,27 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { container, LogLevel, SapphireClient } from "@sapphire/framework";
+import {
+	ApplicationCommandRegistries,
+	container,
+	LogLevel,
+	RegisterBehavior,
+	SapphireClient,
+} from "@sapphire/framework";
 import { GatewayIntentBits } from "discord.js";
 import { prisma } from "./prisma.js";
 import { logger } from "./services/logger.js";
 
 logger.info({ env: process.env.NODE_ENV ?? "development" }, "Starting bot...");
+
+ApplicationCommandRegistries.setDefaultBehaviorWhenNotIdentical(
+	RegisterBehavior.Overwrite,
+);
+
+if (process.env.DISCORD_GUILD_ID) {
+	ApplicationCommandRegistries.setDefaultGuildIds([
+		process.env.DISCORD_GUILD_ID,
+	]);
+}
 
 const client = new SapphireClient({
 	intents: [GatewayIntentBits.Guilds],
@@ -16,11 +32,7 @@ const client = new SapphireClient({
 	},
 });
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 container.prisma = prisma;
-client.stores.get("listeners").registerPath(path.join(__dirname, "events"));
 
 const token = process.env.DISCORD_TOKEN;
 

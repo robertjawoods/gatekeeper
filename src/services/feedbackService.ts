@@ -4,14 +4,12 @@ import { createGuildLogger } from "./logger.js";
 const FEEDBACK_MODAL_PREFIX = "feedbackModal";
 
 export function buildFeedbackModalCustomId(
-	trialId: number,
 	targetId: string,
 ): string {
-	return `${FEEDBACK_MODAL_PREFIX}:${trialId}:${targetId}`;
+	return `${FEEDBACK_MODAL_PREFIX}:${targetId}`;
 }
 
 export function parseFeedbackModalCustomId(customId: string): {
-	trialId: number;
 	targetId: string;
 } | null {
 	if (!customId.startsWith(`${FEEDBACK_MODAL_PREFIX}:`)) {
@@ -19,17 +17,16 @@ export function parseFeedbackModalCustomId(customId: string): {
 	}
 
 	const parts = customId.split(":");
-	if (parts.length !== 3) {
+	if (parts.length !== 2) {
 		return null;
 	}
 
-	const trialId = Number(parts[1]);
-	const targetId = parts[2];
-	if (!Number.isInteger(trialId) || trialId <= 0 || !targetId) {
+	const targetId = parts[1];
+	if (!targetId) {
 		return null;
 	}
 
-	return { trialId, targetId };
+	return { targetId };
 }
 
 type CreateFeedbackInput = {

@@ -11,34 +11,31 @@ import {
 	type User,
 } from "discord.js";
 import { buildFeedbackModalCustomId } from "../services/feedbackService.js";
-import { resolveGuildDisplayName } from "../services/guildSettings.js";
-import { createGuildLogger } from "../services/logger.js";
-import { findActiveTrial } from "../services/trialService.js";
 
 type TrialCommandInteraction =
 	| ChatInputCommandInteraction
 	| ContextMenuCommandInteraction;
 
 /* 
-    This form collects feedback from officers about a trial's performance 
+	This form collects feedback from officers about a trial's performance 
 
-    Performance 1-5
-    Attitude 1-5
-    Focus 1-5
-    Late (Y/N)
-    Comments (text field)
+	Performance 1-5
+	Attitude 1-5
+	Focus 1-5
+	Late (Y/N)
+	Comments (text field)
 
-    the officer giving the feedback should be recorded
+	the officer giving the feedback should be recorded
 
-    each officer should give feedback for each trial each raid night while the trial is active, 
-    and the feedback should be stored in the database and associated with the trial and the officer who gave it.
+	each officer should give feedback for each trial each raid night while the trial is active, 
+	and the feedback should be stored in the database and associated with the trial and the officer who gave it.
 
-    after 4 entries, the feedback should be averaged, maybe an ai summary of the comments should be generated,
-    and the trial should be marked as completed and removed from the active trials list.
+	after 4 entries, the feedback should be averaged, maybe an ai summary of the comments should be generated,
+	and the trial should be marked as completed and removed from the active trials list.
 
-    the report should be sent as a message in a moderator channel, and should have voting buttons
-    for "Promote", "Extend Trial", and "Reject".
-     
+	the report should be sent as a message in a moderator channel, and should have voting buttons
+	for "Promote", "Extend Trial", and "Reject".
+	 
 */
 
 export class FeedbackCommand extends Command {
@@ -48,6 +45,7 @@ export class FeedbackCommand extends Command {
 			name: "feedback",
 			description:
 				"Provides a feedback form for users to submit their feedback.",
+			preconditions: ["OfficerOnly"],
 		});
 	}
 
@@ -120,42 +118,9 @@ export class FeedbackCommand extends Command {
 			return;
 		}
 
-		const activeTrial = await findActiveTrial(
-			this.container.prisma,
-			interaction.guildId,
-			target.id,
-		);
-		if (!activeTrial) {
-			createGuildLogger(interaction.guildId).info(
-				{ targetId: target.id },
-				"Feedback rejected: no active trial found.",
-			);
-			await interaction.reply({
-				content: `No active trial found for ${target.tag}.`,
-				flags: ["Ephemeral"],
-			});
-			return;
-		}
-
-		createGuildLogger(interaction.guildId).info(
-			{
-				targetId: target.id,
-				trialId: activeTrial.id,
-				officerId: interaction.user.id,
-			},
-			"Feedback modal opened.",
-		);
-
-		const displayName =
-			activeTrial.userDisplayName ??
-			(await resolveGuildDisplayName(
-				this.container.client,
-				interaction.guildId,
-				target.id,
-				target.displayName,
-			));
+		const displayName = target.displayName ?? target.username;
 		const modal = new ModalBuilder()
-			.setCustomId(buildFeedbackModalCustomId(activeTrial.id, target.id))
+			.setCustomId(buildFeedbackModalCustomId(target.id))
 			.setTitle(`Feedback for ${displayName}`);
 
 		const performanceInput = new TextInputBuilder()

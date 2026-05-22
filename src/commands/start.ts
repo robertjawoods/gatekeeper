@@ -3,21 +3,9 @@ import {
 	ApplicationCommandType,
 	type ChatInputCommandInteraction,
 	type ContextMenuCommandInteraction,
-	type Guild,
 	type User,
 } from "discord.js";
-import { buildTrialStartedEmbed } from "../services/embedBuilders.js";
-import {
-	GuildSettingsMissingError,
-	getGuildSettings,
-	resolveGuildDisplayName,
-	sendOfficerChannelMessage,
-} from "../services/guildSettings.js";
-import { audit, createGuildLogger } from "../services/logger.js";
-import {
-	projectTrialExpectedEndDate,
-	startTrial,
-} from "../services/trialService.js";
+import { startTrialWorkflow } from "../services/trialService.js";
 
 type TrialCommandInteraction =
 	| ChatInputCommandInteraction
@@ -49,60 +37,6 @@ async function getValidatedGuildContext(interaction: TrialCommandInteraction) {
 	}
 
 	return { guild, guildId };
-}
-
-async function getSettingsOrReply(
-	interaction: TrialCommandInteraction,
-	prisma: Parameters<typeof getGuildSettings>[0],
-	guildId: string,
-) {
-	try {
-		return await getGuildSettings(prisma, guildId);
-	} catch (error) {
-		if (error instanceof GuildSettingsMissingError) {
-			await interaction.reply({
-				content:
-					"Server settings have not been configured yet. Run `/settings` first.",
-				flags: ["Ephemeral"],
-			});
-			return null;
-		}
-
-		createGuildLogger(guildId).error(
-			{ err: error },
-			"Error retrieving guild settings.",
-		);
-		await interaction.reply({
-			content:
-				"An error occurred while retrieving server settings. Please try again later.",
-			flags: ["Ephemeral"],
-		});
-		return null;
-	}
-}
-
-async function addTrialRoleOrReply(
-	interaction: TrialCommandInteraction,
-	guild: Guild,
-	userId: string,
-	trialRoleId: string,
-) {
-	try {
-		const member = await guild.members.fetch(userId);
-		await member.roles.add(trialRoleId);
-		return true;
-	} catch (error) {
-		createGuildLogger(guild.id).error(
-			{ userId, trialRoleId, err: error },
-			"Error adding trial role.",
-		);
-		await interaction.reply({
-			content:
-				"Trial was created, but I could not add the trial role. Please check my role permissions.",
-			flags: ["Ephemeral"],
-		});
-		return false;
-	}
 }
 
 // Starting a trial should create a new trial entry in the database and reply with a confirmation message.
@@ -174,134 +108,29 @@ export class StartCommand extends Command {
 	}
 
 	private async runStart(interaction: TrialCommandInteraction, target: User) {
-		const client = this.container.client;
-		const messageClient = client as Parameters<
-			typeof sendOfficerChannelMessage
-		>[0];
-		const prisma = this.container.prisma;
-
 		const guildContext = await getValidatedGuildContext(interaction);
 		if (!guildContext) {
 			return;
 		}
 
-		const { guild, guildId } = guildContext;
-		const log = createGuildLogger(guildId);
-
-		const settings = await getSettingsOrReply(interaction, prisma, guildId);
-		if (!settings) {
-			return;
-		}
-
-		const targetDisplayNameSnapshot = await resolveGuildDisplayName(
-			client,
-			guildId,
-			target.id,
-			target.displayName,
-		);
-		const officerDisplayNameSnapshot = await resolveGuildDisplayName(
-			client,
-			guildId,
-			interaction.user.id,
-			interaction.user.username,
-		);
-
-		let createdTrialStartTime: Date | null = null;
-
-		try {
-			const result = await startTrial(
-				prisma,
-				guildId,
-				target.id,
-				interaction.user.id,
-				targetDisplayNameSnapshot,
-				officerDisplayNameSnapshot,
-			);
-
-			if (!result.created) {
-				log.info(
-					{ targetId: target.id },
-					"Trial start rejected: user already has an active trial.",
-				);
-				await interaction.reply({
-					content: `${target.tag} already has an active trial in this server.`,
-					flags: ["Ephemeral"],
-				});
-				return;
-			}
-
-			log.info(
-				{ targetId: target.id, trialId: result.trial?.id },
-				"Trial created successfully.",
-			);
-			audit(guildId, "trial.started", interaction.user.id, {
-				targetId: target.id,
-				trialId: result.trial?.id,
-			});
-			createdTrialStartTime = result.trial?.startTime ?? null;
-		} catch (error) {
-			log.error({ targetId: target.id, err: error }, "Error creating trial.");
-			await interaction.reply({
-				content:
-					"An error occurred while starting the trial. Please try again later.",
-				flags: ["Ephemeral"],
-			});
-			return;
-		}
-
-		const roleUpdated = await addTrialRoleOrReply(
-			interaction,
-			guild,
-			target.id,
-			settings.trialRoleId,
-		);
-		if (!roleUpdated) {
-			return;
-		}
-
-		const displayName = targetDisplayNameSnapshot;
-		const officerDisplayName = officerDisplayNameSnapshot;
-		const projectedEndDate = createdTrialStartTime
-			? projectTrialExpectedEndDate(
-					createdTrialStartTime,
-					settings.raidScheduleCron,
-					settings.raidAttendanceReminderThreshold,
-				)
-			: null;
-		const logoUrl = client.user?.displayAvatarURL({
-			extension: "png",
-			size: 256,
+		const workflowResult = await startTrialWorkflow({
+			prisma: this.container.prisma,
+			client: this.container.client,
+			guild: guildContext.guild,
+			guildId: guildContext.guildId,
+			target: {
+				id: target.id,
+				tag: target.tag,
+				displayName: target.displayName,
+			},
+			actor: {
+				id: interaction.user.id,
+				username: interaction.user.username,
+			},
 		});
-		const embed = buildTrialStartedEmbed(
-			{
-				memberDisplayName: displayName,
-				memberId: target.id,
-				officerDisplayName,
-				officerId: interaction.user.id,
-				startedAt: createdTrialStartTime ?? new Date(),
-				expectedCompletionDate: projectedEndDate,
-			},
-			logoUrl,
-		);
-		const sendResult = await sendOfficerChannelMessage(
-			messageClient,
-			settings.officerChannelId,
-			{
-				embeds: [embed.toJSON()],
-			},
-		);
-
-		if (!sendResult.delivered) {
-			await interaction.reply({
-				content:
-					"Trial was started, but I could not send the update to the officer channel. Please check channel settings and permissions.",
-				flags: ["Ephemeral"],
-			});
-			return;
-		}
 
 		await interaction.reply({
-			content: "Posted start update in the officer channel.",
+			content: workflowResult.content,
 			flags: ["Ephemeral"],
 		});
 	}

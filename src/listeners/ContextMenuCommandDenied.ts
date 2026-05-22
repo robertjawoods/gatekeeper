@@ -1,8 +1,8 @@
 import {
-	Events as SapphireEvents,
-	Listener,
 	type ContextMenuCommandDeniedPayload,
-	UserError,
+	Listener,
+	Events as SapphireEvents,
+	type UserError,
 } from "@sapphire/framework";
 import { logger } from "../services/logger.js";
 

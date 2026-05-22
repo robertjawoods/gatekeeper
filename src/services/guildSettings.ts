@@ -34,6 +34,46 @@ export async function getGuildSettings(
 	return settings;
 }
 
+export type GuildSettingsLoadResult =
+	| { ok: true; settings: Settings }
+	| {
+			ok: false;
+			reason: "missing" | "error";
+			userMessage: string;
+			error?: unknown;
+	  };
+
+export async function loadGuildSettings(
+	prisma: PrismaClient,
+	guildId: string,
+): Promise<GuildSettingsLoadResult> {
+	try {
+		const settings = await getGuildSettings(prisma, guildId);
+		return { ok: true, settings };
+	} catch (error) {
+		if (error instanceof GuildSettingsMissingError) {
+			return {
+				ok: false,
+				reason: "missing",
+				userMessage:
+					"Server settings have not been configured yet. Run `/settings` first.",
+			};
+		}
+
+		logger.error(
+			{ guildId, err: error },
+			"loadGuildSettings: failed to retrieve guild settings.",
+		);
+		return {
+			ok: false,
+			reason: "error",
+			userMessage:
+				"An error occurred while retrieving server settings. Please try again later.",
+			error,
+		};
+	}
+}
+
 export async function saveGuildSettings(
 	prisma: PrismaClient,
 	settings: {

@@ -1,6 +1,6 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Client, GatewayIntentBits } from "discord.js";
-import { PrismaClient } from "../src/generated/prisma/client.js";
+import { type Prisma, PrismaClient } from "../src/generated/prisma/client.js";
 
 const REQUIRED_CONFIRMATION = "BACKFILL_TRIAL_DISPLAY_NAMES";
 
@@ -329,7 +329,7 @@ async function run(): Promise<void> {
 
 	try {
 		while (options.maxBatches === null || batches < options.maxBatches) {
-			const rows = await prisma.trial.findMany({
+			const rows: TrialRow[] = await prisma.trial.findMany({
 				where,
 				select: {
 					id: true,
@@ -354,7 +354,7 @@ async function run(): Promise<void> {
 			processedRows += rows.length;
 			cursor = rows[rows.length - 1]?.id ?? null;
 
-			const operations: Array<Promise<{ count: number }>> = [];
+			const operations: Array<Prisma.PrismaPromise<{ count: number }>> = [];
 			let plannedUpdates = 0;
 
 			for (const row of rows) {

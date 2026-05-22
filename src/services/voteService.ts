@@ -1,6 +1,14 @@
+import type { SapphireClient } from "@sapphire/framework";
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import { TrialVoteOption } from "../generated/prisma/client.js";
+import { buildTrialVotePollEmbed } from "./embedBuilders.js";
+import {
+	loadGuildSettings,
+	resolveGuildDisplayName,
+	sendOfficerChannelMessage,
+} from "./guildSettings.js";
+import { createGuildLogger } from "./logger.js";
 
 const VOTE_CUSTOM_ID_PREFIX = "trialvote";
 
@@ -352,4 +360,134 @@ export async function closeTrialVotePoll(
 	});
 
 	return { closed: true, pollId: existing.id, messageId: existing.messageId };
+}
+
+export async function finalizeTrialVotePollArtifacts(input: {
+	prisma: PrismaClient;
+	client: SapphireClient;
+	guildId: string;
+	trialId: number;
+	officerChannelId: string;
+	outcome: "passed" | "failed";
+}): Promise<void> {
+	const log = createGuildLogger(input.guildId);
+	const closeResult = await closeTrialVotePoll(
+		input.prisma,
+		input.guildId,
+		input.trialId,
+	);
+
+	if (!closeResult.closed || !closeResult.messageId) {
+		return;
+	}
+
+	try {
+		const channel = await input.client.channels.fetch(input.officerChannelId);
+		if (!channel?.isTextBased()) {
+			return;
+		}
+
+		const msg = await channel.messages.fetch(closeResult.messageId);
+		await msg.edit({
+			components: buildTrialVoteButtons(closeResult.pollId, true),
+		});
+	} catch (error) {
+		log.error(
+			{ err: error, trialId: input.trialId, pollId: closeResult.pollId },
+			`Failed to disable vote poll buttons after trial ${input.outcome}.`,
+		);
+	}
+}
+
+export type StartTrialVoteWorkflowResult = {
+	content: string;
+};
+
+export async function startTrialVoteWorkflow(input: {
+	prisma: PrismaClient;
+	client: SapphireClient;
+	guildId: string;
+	target: { id: string; tag: string; displayName: string };
+	actorId: string;
+}): Promise<StartTrialVoteWorkflowResult> {
+	const log = createGuildLogger(input.guildId);
+	const settingsResult = await loadGuildSettings(input.prisma, input.guildId);
+	if (!settingsResult.ok) {
+		if (settingsResult.reason === "error") {
+			log.error(
+				{ err: settingsResult.error },
+				"Error retrieving guild settings.",
+			);
+		}
+		return { content: settingsResult.userMessage };
+	}
+
+	const pollResult = await createTrialVotePoll(
+		input.prisma,
+		input.guildId,
+		input.target.id,
+		input.actorId,
+	);
+	if (!pollResult.created) {
+		return { content: `No active trial found for ${input.target.tag}.` };
+	}
+
+	const poll = pollResult.poll;
+	const logoUrl = input.client.user?.displayAvatarURL({
+		extension: "png",
+		size: 256,
+	});
+	const targetDisplayName =
+		poll.targetDisplayName ??
+		(await resolveGuildDisplayName(
+			input.client,
+			input.guildId,
+			input.target.id,
+			input.target.displayName,
+		));
+	const embed = buildTrialVotePollEmbed(
+		{
+			targetDisplayName,
+			targetId: poll.targetId,
+			trialId: poll.trialId,
+			pollId: poll.pollId,
+			open: poll.open,
+			passVotes: poll.passVotes,
+			failVotes: poll.failVotes,
+			extendVotes: poll.extendVotes,
+			totalVotes: poll.totalVotes,
+		},
+		logoUrl,
+	);
+
+	const sendResult = await sendOfficerChannelMessage(
+		input.client,
+		settingsResult.settings.officerChannelId,
+		{
+			embeds: [embed],
+			components: buildTrialVoteButtons(poll.pollId, !poll.open),
+		},
+	);
+
+	if (!sendResult.delivered) {
+		return {
+			content:
+				"Vote poll was created, but I could not send it to the officer channel. Please check channel settings and permissions.",
+		};
+	}
+
+	const attached = await attachTrialVotePollMessage(
+		input.prisma,
+		input.guildId,
+		poll.pollId,
+		sendResult.messageId,
+	);
+	if (!attached) {
+		log.error(
+			{ pollId: poll.pollId, messageId: sendResult.messageId },
+			"Failed to attach vote poll message id.",
+		);
+	}
+
+	return { content: "Posted vote poll in the officer channel." };
 }

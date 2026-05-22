@@ -1,8 +1,8 @@
 import {
-	Events as SapphireEvents,
-	Listener,
-	UserError,
 	type ChatInputCommandErrorPayload,
+	Listener,
+	Events as SapphireEvents,
+	UserError,
 } from "@sapphire/framework";
 import { logger } from "../services/logger.js";
 
@@ -33,15 +33,18 @@ async function replyEphemeralFallback(
 		});
 	} catch (replyError) {
 		if (
-			typeof replyError === "object"
-			&& replyError !== null
-			&& "code" in replyError
-			&& (replyError as { code?: unknown }).code === 40060
+			typeof replyError === "object" &&
+			replyError !== null &&
+			"code" in replyError &&
+			(replyError as { code?: unknown }).code === 40060
 		) {
 			return;
 		}
 
-		logger.error({ err: replyError }, "Failed to send fallback interaction reply.");
+		logger.error(
+			{ err: replyError },
+			"Failed to send fallback interaction reply.",
+		);
 	}
 }
 

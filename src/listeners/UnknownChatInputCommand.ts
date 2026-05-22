@@ -1,6 +1,6 @@
 import {
-	Events as SapphireEvents,
 	Listener,
+	Events as SapphireEvents,
 	type UnknownChatInputCommandPayload,
 } from "@sapphire/framework";
 import { logger } from "../services/logger.js";
@@ -16,7 +16,9 @@ export class UnknownChatInputCommandListener extends Listener {
 		});
 	}
 
-	public override async run(payload: UnknownChatInputCommandPayload): Promise<void> {
+	public override async run(
+		payload: UnknownChatInputCommandPayload,
+	): Promise<void> {
 		logger.warn(
 			{
 				interactionId: payload.interaction.id,
@@ -35,7 +37,10 @@ export class UnknownChatInputCommandListener extends Listener {
 				});
 			}
 		} catch (error) {
-			logger.error({ err: error }, "Failed to reply for unknown chat input command.");
+			logger.error(
+				{ err: error },
+				"Failed to reply for unknown chat input command.",
+			);
 		}
 	}
 }

@@ -3,9 +3,7 @@ import { createGuildLogger } from "./logger.js";
 
 const FEEDBACK_MODAL_PREFIX = "feedbackModal";
 
-export function buildFeedbackModalCustomId(
-	targetId: string,
-): string {
+export function buildFeedbackModalCustomId(targetId: string): string {
 	return `${FEEDBACK_MODAL_PREFIX}:${targetId}`;
 }
 

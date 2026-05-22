@@ -5,7 +5,7 @@ declare module "@sapphire/framework" {
 		prisma: PrismaClient;
 	}
 
-	interface Preconditions { 
+	interface Preconditions {
 		OfficerOnly: never;
 	}
 }

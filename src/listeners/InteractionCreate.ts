@@ -16,13 +16,13 @@ import {
 } from "../services/guildSettings.js";
 import { audit, logger } from "../services/logger.js";
 import { refreshGuildRaidReminderSchedule } from "../services/raidReminderScheduler.js";
+import { findActiveTrial } from "../services/trialService.js";
 import {
 	buildTrialVoteButtons,
 	isVoteCustomId,
 	parseVoteCustomId,
 	recordTrialVote,
 } from "../services/voteService.js";
-import { findActiveTrial } from "../services/trialService.js";
 
 async function handleSettingsModal(
 	interaction: ModalSubmitInteraction,
@@ -158,7 +158,8 @@ async function handleFeedbackModal(
 
 	if (!activeTrial) {
 		await interaction.editReply({
-			content: "This user no longer has an active trial. Feedback was not saved.",
+			content:
+				"This user no longer has an active trial. Feedback was not saved.",
 		});
 		return;
 	}

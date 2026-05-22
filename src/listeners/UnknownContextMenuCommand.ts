@@ -1,6 +1,6 @@
 import {
-	Events as SapphireEvents,
 	Listener,
+	Events as SapphireEvents,
 	type UnknownContextMenuCommandPayload,
 } from "@sapphire/framework";
 import { logger } from "../services/logger.js";

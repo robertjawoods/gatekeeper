@@ -64,6 +64,7 @@ export async function runGuildRaidAttendanceReminderCycle(
 
 	const attendance = await listActiveTrialAttendance(context.prisma, guildId);
 	const threshold = settings.raidAttendanceReminderThreshold;
+	const officerChannelId = settings.officerChannelId;
 	const candidates = attendance.filter(
 		(item) => item.raidNightsAttended >= threshold,
 	);
@@ -119,7 +120,7 @@ export async function runGuildRaidAttendanceReminderCycle(
 
 		const sendResult = await sendOfficerChannelMessage(
 			context.client,
-			settings.officerChannelId,
+			officerChannelId,
 			{
 				embeds: [embed.toJSON()],
 			},
@@ -166,12 +167,16 @@ export async function runGuildRaidAttendanceReminderCycle(
 
 	for (const result of settled) {
 		if (result.status === "rejected") {
-			log.error({ err: result.reason }, "Candidate reminder processing threw unexpectedly.");
+			log.error(
+				{ err: result.reason },
+				"Candidate reminder processing threw unexpectedly.",
+			);
 			deliveryFailures += 1;
 			continue;
 		}
 		if (result.value.status === "sent") remindersSent += 1;
-		else if (result.value.status === "duplicate") remindersSkippedAsDuplicate += 1;
+		else if (result.value.status === "duplicate")
+			remindersSkippedAsDuplicate += 1;
 		else deliveryFailures += 1;
 	}
 

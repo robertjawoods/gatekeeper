@@ -5,18 +5,7 @@ import {
 	type ContextMenuCommandInteraction,
 	type User,
 } from "discord.js";
-import { buildTrialVotePollEmbed } from "../services/embedBuilders.js";
-import {
-	GuildSettingsMissingError,
-	getGuildSettings,
-	resolveGuildDisplayName,
-	sendOfficerChannelMessage,
-} from "../services/guildSettings.js";
-import {
-	attachTrialVotePollMessage,
-	buildTrialVoteButtons,
-	createTrialVotePoll,
-} from "../services/voteService.js";
+import { startTrialVoteWorkflow } from "../services/voteService.js";
 
 type TrialCommandInteraction =
 	| ChatInputCommandInteraction
@@ -34,31 +23,6 @@ async function getValidatedGuildContext(interaction: TrialCommandInteraction) {
 	}
 
 	return { guild, guildId };
-}
-
-async function getSettingsOrReply(
-	interaction: TrialCommandInteraction,
-	command: Command,
-	guildId: string,
-) {
-	try {
-		return await getGuildSettings(command.container.prisma, guildId);
-	} catch (error) {
-		if (error instanceof GuildSettingsMissingError) {
-			await interaction.editReply({
-				content:
-					"Server settings have not been configured yet. Run `/settings` first.",
-			});
-			return null;
-		}
-
-		console.error("Error retrieving guild settings:", error);
-		await interaction.editReply({
-			content:
-				"An error occurred while retrieving server settings. Please try again later.",
-		});
-		return null;
-	}
 }
 
 export class VoteCommand extends Command {
@@ -140,83 +104,20 @@ export class VoteCommand extends Command {
 
 		const { guildId } = guildContext;
 
-		const settings = await getSettingsOrReply(interaction, this, guildId);
-		if (!settings) {
-			return;
-		}
-
-		const pollResult = await createTrialVotePoll(
-			this.container.prisma,
+		const workflowResult = await startTrialVoteWorkflow({
+			prisma: this.container.prisma,
+			client: this.container.client,
 			guildId,
-			target.id,
-			interaction.user.id,
-		);
-		if (!pollResult.created) {
-			await interaction.editReply({
-				content: `No active trial found for ${target.tag}.`,
-			});
-			return;
-		}
-
-		const poll = pollResult.poll;
-		const logoUrl = this.container.client.user?.displayAvatarURL({
-			extension: "png",
-			size: 256,
+			target: {
+				id: target.id,
+				tag: target.tag,
+				displayName: target.displayName,
+			},
+			actorId: interaction.user.id,
 		});
-		const targetDisplayName =
-			poll.targetDisplayName ??
-			(await resolveGuildDisplayName(
-				this.container.client,
-				guildId,
-				target.id,
-				target.displayName,
-			));
-		const embed = buildTrialVotePollEmbed(
-			{
-				targetDisplayName,
-				targetId: poll.targetId,
-				trialId: poll.trialId,
-				pollId: poll.pollId,
-				open: poll.open,
-				passVotes: poll.passVotes,
-				failVotes: poll.failVotes,
-				extendVotes: poll.extendVotes,
-				totalVotes: poll.totalVotes,
-			},
-			logoUrl,
-		);
-
-		const sendResult = await sendOfficerChannelMessage(
-			this.container.client,
-			settings.officerChannelId,
-			{
-				embeds: [embed],
-				components: buildTrialVoteButtons(poll.pollId, !poll.open),
-			},
-		);
-
-		if (!sendResult.delivered) {
-			await interaction.editReply({
-				content:
-					"Vote poll was created, but I could not send it to the officer channel. Please check channel settings and permissions.",
-			});
-			return;
-		}
-
-		const attached = await attachTrialVotePollMessage(
-			this.container.prisma,
-			guildId,
-			poll.pollId,
-			sendResult.messageId,
-		);
-		if (!attached) {
-			console.error(
-				`Failed to attach message ${sendResult.messageId} to poll ${poll.pollId} in guild ${guildId}.`,
-			);
-		}
 
 		await interaction.editReply({
-			content: "Posted vote poll in the officer channel.",
+			content: workflowResult.content,
 		});
 	}
 }

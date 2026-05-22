@@ -1,5 +1,8 @@
 import {
+	ApplicationCommandType,
 	type ChatInputCommandInteraction,
+	type ContextMenuCommandInteraction,
+	type User,
 } from "discord.js";
 import { ApplicationCommandRegistry, Command } from "@sapphire/framework";
 import { buildTrialVotePollEmbed } from "../services/embedBuilders.js";
@@ -15,18 +18,12 @@ import {
 	createTrialVotePoll,
 } from "../services/voteService.js";
 
-async function getValidatedTarget(interaction: ChatInputCommandInteraction) {
-	const target = interaction.options.getUser("target");
-	if (!target) {
-		await interaction.editReply({ content: "Target user is required." });
-		return null;
-	}
-
-	return target;
-}
+type TrialCommandInteraction =
+	| ChatInputCommandInteraction
+	| ContextMenuCommandInteraction;
 
 async function getValidatedGuildContext(
-	interaction: ChatInputCommandInteraction,
+	interaction: TrialCommandInteraction,
 ) {
 	const guild = interaction.guild;
 	const guildId = interaction.guildId;
@@ -42,7 +39,7 @@ async function getValidatedGuildContext(
 }
 
 async function getSettingsOrReply(
-	interaction: ChatInputCommandInteraction,
+	interaction: TrialCommandInteraction,
 	command: Command,
 	guildId: string,
 ) {
@@ -90,10 +87,49 @@ export class VoteCommand extends Command {
 				),
 			{ idHints: ["1507106764330631330"] },
 		);
+
+		registry.registerContextMenuCommand((builder) =>
+			builder
+				.setName("Start Trial Vote")
+				.setType(ApplicationCommandType.User),
+			{
+				idHints: ["1507139674055905341", "1507141187604320367", "1507142625571115188"],
+			},
+		);
 	}
 
 	public override async chatInputRun(
 		interaction: ChatInputCommandInteraction,
+	) {
+		const target = interaction.options.getUser("target");
+		if (!target) {
+			await interaction.reply({
+				content: "Target user is required.",
+				flags: ["Ephemeral"],
+			});
+			return;
+		}
+
+		await this.runVote(interaction, target);
+	}
+
+	public override async contextMenuRun(
+		interaction: ContextMenuCommandInteraction,
+	) {
+		if (!interaction.isUserContextMenuCommand()) {
+			await interaction.reply({
+				content: "This command can only be used from a user context menu.",
+				flags: ["Ephemeral"],
+			});
+			return;
+		}
+
+		await this.runVote(interaction, interaction.targetUser);
+	}
+
+	private async runVote(
+		interaction: TrialCommandInteraction,
+		target: User,
 	) {
 		await interaction.deferReply({ flags: ["Ephemeral"] });
 
@@ -103,10 +139,6 @@ export class VoteCommand extends Command {
 		}
 
 		const { guildId } = guildContext;
-		const target = await getValidatedTarget(interaction);
-		if (!target) {
-			return;
-		}
 
 		const settings = await getSettingsOrReply(interaction, this, guildId);
 		if (!settings) {

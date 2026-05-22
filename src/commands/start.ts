@@ -1,6 +1,10 @@
 import {
+	ApplicationCommandType,
 	type ChatInputCommandInteraction,
+	type ContextMenuCommandInteraction,
+	type Guild,
 	SlashCommandBuilder,
+	type User,
 } from "discord.js";
 import { buildTrialStartedEmbed } from "../services/embedBuilders.js";
 import {
@@ -16,6 +20,10 @@ import {
 } from "../services/trialService.js";
 import { ApplicationCommandRegistry, Command } from "@sapphire/framework";
 
+type TrialCommandInteraction =
+	| ChatInputCommandInteraction
+	| ContextMenuCommandInteraction;
+
 async function getValidatedTarget(interaction: ChatInputCommandInteraction) {
 	const target = interaction.options.getUser("target");
 	if (!target) {
@@ -30,7 +38,7 @@ async function getValidatedTarget(interaction: ChatInputCommandInteraction) {
 }
 
 async function getValidatedGuildContext(
-	interaction: ChatInputCommandInteraction,
+	interaction: TrialCommandInteraction,
 ) {
 	const guild = interaction.guild;
 	const guildId = interaction.guildId;
@@ -47,7 +55,7 @@ async function getValidatedGuildContext(
 }
 
 async function getSettingsOrReply(
-	interaction: ChatInputCommandInteraction,
+	interaction: TrialCommandInteraction,
 	prisma: Parameters<typeof getGuildSettings>[0],
 	guildId: string,
 ) {
@@ -77,8 +85,8 @@ async function getSettingsOrReply(
 }
 
 async function addTrialRoleOrReply(
-	interaction: ChatInputCommandInteraction,
-	guild: NonNullable<ChatInputCommandInteraction["guild"]>,
+	interaction: TrialCommandInteraction,
+	guild: Guild,
 	userId: string,
 	trialRoleId: string,
 ) {
@@ -128,10 +136,49 @@ export class StartCommand extends Command {
 				),
 			{ idHints: ["1506975873704660992", "1507106674631114873"] },
 		);
+
+		registry.registerContextMenuCommand((builder) =>
+			builder
+				.setName("Start Trial")
+				.setType(ApplicationCommandType.User),
+			{
+				idHints: [
+					"1507139584482349116",
+					"1507141185871806595",
+					"1507142534667960320",
+				],
+			},
+		);
 	}
 
 	public override async chatInputRun(
 		interaction: ChatInputCommandInteraction,
+	) {
+		const target = await getValidatedTarget(interaction);
+		if (!target) {
+			return;
+		}
+
+		await this.runStart(interaction, target);
+	}
+
+	public override async contextMenuRun(
+		interaction: ContextMenuCommandInteraction,
+	) {
+		if (!interaction.isUserContextMenuCommand()) {
+			await interaction.reply({
+				content: "This command can only be used from a user context menu.",
+				flags: ["Ephemeral"],
+			});
+			return;
+		}
+
+		await this.runStart(interaction, interaction.targetUser);
+	}
+
+	private async runStart(
+		interaction: TrialCommandInteraction,
+		target: User,
 	) {
 		const client = this.container.client;
 		const messageClient = client as Parameters<
@@ -146,11 +193,6 @@ export class StartCommand extends Command {
 
 		const { guild, guildId } = guildContext;
 		const log = createGuildLogger(guildId);
-
-		const target = await getValidatedTarget(interaction);
-		if (!target) {
-			return;
-		}
 
 		const settings = await getSettingsOrReply(interaction, prisma, guildId);
 		if (!settings) {

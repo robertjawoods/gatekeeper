@@ -1,5 +1,8 @@
 import {
+	ApplicationCommandType,
 	type ChatInputCommandInteraction,
+	type ContextMenuCommandInteraction,
+	type User,
 } from "discord.js";
 import { ApplicationCommandRegistry, Command } from "@sapphire/framework";
 import { buildFeedbackSummaryEmbed } from "../services/embedBuilders.js";
@@ -12,6 +15,10 @@ import {
 } from "../services/guildSettings.js";
 import { createGuildLogger } from "../services/logger.js";
 import { projectTrialExpectedEndDate } from "../services/trialService.js";
+
+type TrialCommandInteraction =
+	| ChatInputCommandInteraction
+	| ContextMenuCommandInteraction;
 
 export class SummaryCommand extends Command {
 	public constructor(context: Command.LoaderContext, options: Command.Options) {
@@ -37,10 +44,49 @@ export class SummaryCommand extends Command {
 				),
 			{ idHints: ["1507106762896052334"] },
 		);
+
+		registry.registerContextMenuCommand((builder) =>
+			builder
+				.setName("View Trial Summary")
+				.setType(ApplicationCommandType.User),
+			{
+				idHints: ["1507139591918977176", "1507141186635173968", "1507142623800983634"],
+			},
+		);
 	}
 
 	public override async chatInputRun(
 		interaction: ChatInputCommandInteraction,
+	) {
+		const member = interaction.options.getUser("member");
+		if (!member) {
+			await interaction.reply({
+				content: "Member is required.",
+				flags: ["Ephemeral"],
+			});
+			return;
+		}
+
+		await this.runSummary(interaction, member);
+	}
+
+	public override async contextMenuRun(
+		interaction: ContextMenuCommandInteraction,
+	) {
+		if (!interaction.isUserContextMenuCommand()) {
+			await interaction.reply({
+				content: "This command can only be used from a user context menu.",
+				flags: ["Ephemeral"],
+			});
+			return;
+		}
+
+		await this.runSummary(interaction, interaction.targetUser);
+	}
+
+	private async runSummary(
+		interaction: TrialCommandInteraction,
+		member: User,
 	) {
 		const guildId = interaction.guildId;
 
@@ -73,15 +119,6 @@ export class SummaryCommand extends Command {
 			await interaction.reply({
 				content:
 					"An error occurred while retrieving server settings. Please try again later.",
-				flags: ["Ephemeral"],
-			});
-			return;
-		}
-
-		const member = interaction.options.getUser("member");
-		if (!member) {
-			await interaction.reply({
-				content: "Member is required.",
 				flags: ["Ephemeral"],
 			});
 			return;

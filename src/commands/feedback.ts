@@ -1,16 +1,23 @@
 import {
+	ApplicationCommandType,
 	type ChatInputCommandInteraction,
 	CheckboxBuilder,
+	type ContextMenuCommandInteraction,
 	LabelBuilder,
 	ModalBuilder,
 	TextInputBuilder,
 	TextInputStyle,
+	type User,
 } from "discord.js";
 import { ApplicationCommandRegistry, Command } from "@sapphire/framework";
 import { buildFeedbackModalCustomId } from "../services/feedbackService.js";
 import { resolveGuildDisplayName } from "../services/guildSettings.js";
 import { createGuildLogger } from "../services/logger.js";
 import { findActiveTrial } from "../services/trialService.js";
+
+type TrialCommandInteraction =
+	| ChatInputCommandInteraction
+	| ContextMenuCommandInteraction;
 
 /* 
     This form collects feedback from officers about a trial's performance 
@@ -58,24 +65,53 @@ export class FeedbackCommand extends Command {
 				),
 			{ idHints: ["1507106768046657608"] },
 		);
+
+		registry.registerContextMenuCommand((builder) =>
+			builder
+				.setName("Add Feedback")
+				.setType(ApplicationCommandType.User),
+			{
+				idHints: ["1507139682578862162", "1507141274413830285", "1507142863237025944"],
+			},
+		);
 	}
 
 	public override async chatInputRun(
 		interaction: ChatInputCommandInteraction,
 	) {
 		const target = interaction.options.getUser("target");
-
-		if (!interaction.guildId) {
+		if (!target) {
 			await interaction.reply({
-				content: "This command can only be used in a server.",
+				content: "Target user is required.",
 				flags: ["Ephemeral"],
 			});
 			return;
 		}
 
-		if (!target) {
+		await this.openFeedbackModal(interaction, target);
+	}
+
+	public override async contextMenuRun(
+		interaction: ContextMenuCommandInteraction,
+	) {
+		if (!interaction.isUserContextMenuCommand()) {
 			await interaction.reply({
-				content: "Target user is required.",
+				content: "This command can only be used from a user context menu.",
+				flags: ["Ephemeral"],
+			});
+			return;
+		}
+
+		await this.openFeedbackModal(interaction, interaction.targetUser);
+	}
+
+	private async openFeedbackModal(
+		interaction: TrialCommandInteraction,
+		target: User,
+	) {
+		if (!interaction.guildId) {
+			await interaction.reply({
+				content: "This command can only be used in a server.",
 				flags: ["Ephemeral"],
 			});
 			return;

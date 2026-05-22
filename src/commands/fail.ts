@@ -1,5 +1,8 @@
 import {
+	ApplicationCommandType,
 	type ChatInputCommandInteraction,
+	type ContextMenuCommandInteraction,
+	type User,
 } from "discord.js";
 import { ApplicationCommandRegistry, Command } from "@sapphire/framework";
 import { buildTrialResolvedEmbed } from "../services/embedBuilders.js";
@@ -18,6 +21,10 @@ import {
 	buildTrialVoteButtons,
 	closeTrialVotePoll,
 } from "../services/voteService.js";
+
+type TrialCommandInteraction =
+	| ChatInputCommandInteraction
+	| ContextMenuCommandInteraction;
 
 export class FailCommand extends Command {
 	public constructor(context: Command.LoaderContext, options: Command.Options) {
@@ -43,12 +50,54 @@ export class FailCommand extends Command {
 				),
 			{ idHints: ["1507106766935162921"] },
 		);
+
+		registry.registerContextMenuCommand((builder) =>
+			builder
+				.setName("Fail Trial")
+				.setType(ApplicationCommandType.User),
+			{
+				idHints: [
+					"1507139676618752263",
+					"1507141189860593746",
+					"1507142713533923581",
+				],
+			},
+		);
 	}
 
 	public override async chatInputRun(
 		interaction: ChatInputCommandInteraction,
 	) {
 		const target = interaction.options.getUser("target");
+		if (!target) {
+			await interaction.reply({
+				content: "Target user is required.",
+				flags: ["Ephemeral"],
+			});
+			return;
+		}
+
+		await this.runFail(interaction, target);
+	}
+
+	public override async contextMenuRun(
+		interaction: ContextMenuCommandInteraction,
+	) {
+		if (!interaction.isUserContextMenuCommand()) {
+			await interaction.reply({
+				content: "This command can only be used from a user context menu.",
+				flags: ["Ephemeral"],
+			});
+			return;
+		}
+
+		await this.runFail(interaction, interaction.targetUser);
+	}
+
+	private async runFail(
+		interaction: TrialCommandInteraction,
+		target: User,
+	) {
 		const guild = interaction.guild;
 
 		if (!guild || !interaction.guildId) {
@@ -60,14 +109,6 @@ export class FailCommand extends Command {
 		}
 
 		const log = createGuildLogger(interaction.guildId);
-
-		if (!target) {
-			await interaction.reply({
-				content: "Target user is required.",
-				flags: ["Ephemeral"],
-			});
-			return;
-		}
 
 		let settings: Awaited<ReturnType<typeof getGuildSettings>>;
 		let resolvedTrialStartTime: Date | null = null;

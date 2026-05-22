@@ -11,6 +11,7 @@
 		"deploy-commands": "tsx --env-file .env.local deploy-commands.ts",
 		"clear-global-commands": "tsx --env-file .env.local clear-global-commands.ts",
 		"ops:backfill-raid-attendance-date": "pnpm deploy-commands && tsx --env-file .env.local backfill-raid-attendance-date.ts",
+		"ops:backfill-trial-display-names": "tsx --env-file .env.local backfill-trial-display-names.ts",
 		"prisma:generate": "prisma generate",
 		"prisma:migrate": "prisma migrate dev",
 		"lint": "biome check --write"

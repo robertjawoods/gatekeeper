@@ -6,10 +6,7 @@ import {
 	type User,
 } from "discord.js";
 import { startTrialWorkflow } from "../services/trialService.js";
-
-type TrialCommandInteraction =
-	| ChatInputCommandInteraction
-	| ContextMenuCommandInteraction;
+import type { TrialCommandInteraction } from "../types.js";
 
 async function getValidatedTarget(interaction: ChatInputCommandInteraction) {
 	const target = interaction.options.getUser("target");

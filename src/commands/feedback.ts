@@ -11,10 +11,7 @@ import {
 	type User,
 } from "discord.js";
 import { buildFeedbackModalCustomId } from "../services/feedbackService.js";
-
-type TrialCommandInteraction =
-	| ChatInputCommandInteraction
-	| ContextMenuCommandInteraction;
+import type { TrialCommandInteraction } from "../types.js";
 
 /* 
 	This form collects feedback from officers about a trial's performance 

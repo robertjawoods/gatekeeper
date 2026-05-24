@@ -1,0 +1,52 @@
+---
+interface CommandLink {
+	label: string;
+	href: string;
+}
+
+interface Props {
+	items: CommandLink[];
+}
+
+const { items } = Astro.props;
+---
+
+<div class="command-grid">
+	{items.map((item) => (
+		<a class="command-chip" href={item.href}>{item.label}</a>
+	))}
+</div>
+
+<style>
+	.command-grid {
+		display: grid;
+		gap: 0.75rem;
+		grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+		margin: 0.5rem 0 1.25rem;
+	}
+
+	.command-chip {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 2.75rem;
+		border-radius: 0.75rem;
+		border: 1px solid var(--sl-color-gray-5);
+		background: linear-gradient(135deg, var(--sl-color-gray-6), var(--sl-color-gray-5));
+		color: var(--sl-color-white);
+		font-weight: 650;
+		text-decoration: none;
+		transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+	}
+
+	.command-chip:hover {
+		transform: translateY(-1px);
+		border-color: var(--sl-color-accent-high);
+		box-shadow: 0 8px 24px -16px var(--sl-color-accent-high);
+	}
+
+	.command-chip:focus-visible {
+		outline: 2px solid var(--sl-color-accent-high);
+		outline-offset: 2px;
+	}
+</style>

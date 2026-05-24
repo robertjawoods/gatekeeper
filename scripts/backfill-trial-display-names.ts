@@ -7,7 +7,7 @@ const REQUIRED_CONFIRMATION = "BACKFILL_TRIAL_DISPLAY_NAMES";
 type Options = {
 	apply: boolean;
 	confirmToken: string | null;
-	batchSize: number;
+	batchSize: number;	
 	maxBatches: number | null;
 	guildId: string | null;
 	sleepMs: number;

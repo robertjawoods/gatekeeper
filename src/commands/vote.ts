@@ -6,10 +6,7 @@ import {
 	type User,
 } from "discord.js";
 import { startTrialVoteWorkflow } from "../services/voteService.js";
-
-type TrialCommandInteraction =
-	| ChatInputCommandInteraction
-	| ContextMenuCommandInteraction;
+import type { TrialCommandInteraction } from "../types.js";
 
 async function getValidatedGuildContext(interaction: TrialCommandInteraction) {
 	const guild = interaction.guild;

@@ -1,0 +1,75 @@
+---
+title: Gatekeeper
+description: Gatekeeper helps guild leaders run fair member trials with clear steps, shared feedback, and consistent decisions from start to finish.
+template: splash
+hero:
+  tagline: Gatekeeper helps guild leaders run fair member trials with clear steps, shared feedback, and consistent decisions from start to finish
+  image:
+    file: ../../assets/gatekeeper.png
+  actions:
+    - text: Install Gatekeeper
+      link: https://discord.com/api/oauth2/authorize?client_id=1504236836547989631&permissions=268520448&scope=bot%20applications.commands
+      icon: discord
+      attrs:
+          class: discord-install-cta
+          target: _blank
+          rel: noopener noreferrer
+    - text: Installation Guide
+      link: /getting-started/install/
+      icon: right-arrow
+      variant: secondary
+    - text: Command Index
+      link: /commands/
+      icon: right-arrow
+      variant: secondary
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<style is:global>{`
+  .sl-link-button.discord-install-cta {
+    background: #5865f2;
+    border-color: #5865f2;
+    color: #fff;
+  }
+
+  .sl-link-button.discord-install-cta:hover {
+    background: #4752c4;
+    border-color: #4752c4;
+    color: #fff;
+  }
+
+  .hero .actions .sl-link-button.discord-install-cta {
+    order: -1;
+  }
+
+  .hero {
+    padding: 0;
+  }
+
+  @media (min-width: 50rem) {
+    .hero .actions .sl-link-button.discord-install-cta {
+      order: 0;
+    }
+  }
+`}</style>
+
+## What you can do
+
+<CardGrid stagger>
+  <Card title="Manage trial lifecycle" icon="discord">
+    Track each trial member from `/start` to `/pass` or `/fail` with auditable outcomes.
+  </Card>
+  <Card title="Collect actionable feedback" icon="open-book">
+    Use `/feedback`, `/summary`, and `/vote` to collect scores, summarize comments, and make decisions.
+  </Card>
+  <Card title="Configure once per guild" icon="setting">
+    Use `/settings` to set officer channel, role mapping, raid schedule, and reminder threshold.
+  </Card>
+  <Card title="Operate safely" icon="warning">
+    Use `/roledebug` and `/reminders run-now` to diagnose and operate reminder workflows.
+  </Card>
+  <Card title="Start quickly" icon="rocket">
+    Follow the [first trial walkthrough](/getting-started/first-trial/) for a complete end-to-end run.
+  </Card>
+</CardGrid>

@@ -1,0 +1,65 @@
+---
+title: Command Index
+description: Full command reference with links to detailed instructions.
+---
+
+import CommandChipGrid from '../../../components/CommandChipGrid.astro';
+
+All commands are officer-restricted unless noted otherwise.
+
+## Jump to a command
+
+### Trial lifecycle
+
+<CommandChipGrid
+	items={[
+		{ label: '/start', href: '/commands/trial-lifecycle/start/' },
+		{ label: '/pass', href: '/commands/trial-lifecycle/pass/' },
+		{ label: '/fail', href: '/commands/trial-lifecycle/fail/' },
+		{ label: '/vote', href: '/commands/trial-lifecycle/vote/' },
+	]}
+/>
+
+### Feedback and reporting
+
+<CommandChipGrid
+	items={[
+		{ label: '/feedback', href: '/commands/feedback/feedback/' },
+		{ label: '/summary', href: '/commands/feedback/summary/' },
+	]}
+/>
+
+### Admin
+
+<CommandChipGrid
+	items={[
+		{ label: '/settings', href: '/commands/admin/settings/' },
+		{ label: '/reminders run-now', href: '/commands/admin/reminders/' },
+		{ label: '/roledebug', href: '/commands/admin/roledebug/' },
+	]}
+/>
+
+### Utility
+
+<CommandChipGrid
+	items={[
+		{ label: '/list', href: '/commands/utility/list/' },
+		{ label: '/ping', href: '/commands/utility/ping/' },
+	]}
+/>
+
+## Context menu availability matrix
+
+| Command | Context menu available | Context menu name |
+| --- | --- | --- |
+| start | Yes | Start Trial |
+| pass | Yes | Pass Trial |
+| fail | Yes | Fail Trial |
+| vote | Yes | Start Trial Vote |
+| feedback | Yes | Add Feedback |
+| summary | Yes | View Trial Summary |
+| settings | No | N/A |
+| reminders | No | N/A |
+| roledebug | No | N/A |
+| list | No | N/A |
+| ping | No | N/A |

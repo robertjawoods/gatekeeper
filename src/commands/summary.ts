@@ -6,10 +6,7 @@ import {
 	type User,
 } from "discord.js";
 import { postTrialSummaryWorkflow } from "../services/trialService.js";
-
-type TrialCommandInteraction =
-	| ChatInputCommandInteraction
-	| ContextMenuCommandInteraction;
+import type { TrialCommandInteraction } from "../types.js";
 
 export class SummaryCommand extends Command {
 	public constructor(context: Command.LoaderContext, options: Command.Options) {

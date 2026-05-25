@@ -2,15 +2,10 @@ import { type ApplicationCommandRegistry, Command } from "@sapphire/framework";
 import {
 	ApplicationCommandType,
 	type ChatInputCommandInteraction,
-	CheckboxBuilder,
 	type ContextMenuCommandInteraction,
-	LabelBuilder,
-	ModalBuilder,
-	TextInputBuilder,
-	TextInputStyle,
 	type User,
 } from "discord.js";
-import { buildFeedbackModalCustomId } from "../services/feedbackService.js";
+import { buildFeedbackModal } from "../services/feedbackService.js";
 import type { TrialCommandInteraction } from "../types.js";
 
 /* 
@@ -115,67 +110,10 @@ export class FeedbackCommand extends Command {
 			return;
 		}
 
-		const displayName = target.displayName ?? target.username;
-		const modal = new ModalBuilder()
-			.setCustomId(buildFeedbackModalCustomId(target.id))
-			.setTitle(`Feedback for ${displayName}`);
-
-		const performanceInput = new TextInputBuilder()
-			.setCustomId("performance")
-			.setStyle(TextInputStyle.Short)
-			.setPlaceholder("Rate performance from 1 to 5")
-			.setRequired(true);
-
-		const attitudeInput = new TextInputBuilder()
-			.setCustomId("attitude")
-			.setStyle(TextInputStyle.Short)
-			.setPlaceholder("Rate attitude from 1 to 5")
-			.setRequired(true);
-
-		const focusInput = new TextInputBuilder()
-			.setCustomId("focus")
-			.setStyle(TextInputStyle.Short)
-			.setPlaceholder("Rate focus from 1 to 5")
-			.setRequired(true);
-
-		const lateInput = new CheckboxBuilder()
-			.setCustomId("late")
-			.setDefault(false);
-
-		const commentsInput = new TextInputBuilder()
-			.setCustomId("comments")
-			.setStyle(TextInputStyle.Paragraph)
-			.setPlaceholder("Additional comments")
-			.setRequired(false);
-
-		const performanceLabel = new LabelBuilder()
-			.setLabel("Performance (1-5)")
-			.setTextInputComponent(performanceInput);
-
-		const attitudeLabel = new LabelBuilder()
-			.setLabel("Attitude (1-5)")
-			.setTextInputComponent(attitudeInput);
-
-		const focusLabel = new LabelBuilder()
-			.setLabel("Focus (1-5)")
-			.setTextInputComponent(focusInput);
-
-		const lateLabel = new LabelBuilder()
-			.setLabel("Was this trial late to raid?")
-			.setCheckboxComponent(lateInput);
-
-		const commentsLabel = new LabelBuilder()
-			.setLabel("Comments")
-			.setTextInputComponent(commentsInput);
-
-		modal.addLabelComponents(
-			performanceLabel,
-			attitudeLabel,
-			focusLabel,
-			lateLabel,
-			commentsLabel,
+		const modal = buildFeedbackModal(
+			target.id,
+			target.displayName ?? target.username,
 		);
-		// needs components to work
 
 		await interaction.showModal(modal);
 	}

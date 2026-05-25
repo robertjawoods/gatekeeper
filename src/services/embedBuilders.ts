@@ -66,6 +66,18 @@ export type TrialVotePollEmbedInput = {
 	totalVotes: number;
 };
 
+export type TrialFeedbackBoardEmbedItem = {
+	trialId: number;
+	displayName: string;
+	feedbackCount: number;
+	startTime: Date;
+};
+
+export type TrialFeedbackBoardEmbedInput = {
+	entries: TrialFeedbackBoardEmbedItem[];
+	hiddenTrialCount: number;
+};
+
 function applyGatekeeperLogo(
 	embed: EmbedBuilder,
 	logoUrl?: string,
@@ -454,6 +466,45 @@ export function buildTrialVotePollEmbed(
 				{ name: "Total Votes", value: String(input.totalVotes), inline: false },
 			)
 			.setFooter({ text: "Use the buttons below to cast or update your vote." })
+			.setTimestamp(new Date()),
+		logoUrl,
+	);
+}
+
+export function buildTrialFeedbackBoardEmbed(
+	input: TrialFeedbackBoardEmbedInput,
+	logoUrl?: string,
+): EmbedBuilder {
+	if (input.entries.length === 0) {
+		return applyGatekeeperLogo(
+			new EmbedBuilder()
+				.setColor(COLORS.info)
+				.setTitle("Trial Feedback Board")
+				.setDescription("No active trials are available right now.")
+				.setFooter({ text: "Run /trials-feedback again after a trial starts." })
+				.setTimestamp(new Date()),
+			logoUrl,
+		);
+	}
+
+	const descriptionLines = input.entries.map((entry, index) => {
+		return `${index + 1}. **${entry.displayName}** • Feedback: ${entry.feedbackCount} • Started: ${formatDiscordTimestamp(entry.startTime)}`;
+	});
+
+	if (input.hiddenTrialCount > 0) {
+		descriptionLines.push(
+			`...and ${input.hiddenTrialCount} more active trial(s) not shown due to Discord component limits.`,
+		);
+	}
+
+	return applyGatekeeperLogo(
+		new EmbedBuilder()
+			.setColor(COLORS.info)
+			.setTitle("Trial Feedback Board")
+			.setDescription(descriptionLines.join("\n"))
+			.setFooter({
+				text: "Click a button below to submit feedback for that trial.",
+			})
 			.setTimestamp(new Date()),
 		logoUrl,
 	);

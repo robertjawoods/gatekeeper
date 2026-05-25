@@ -6,6 +6,7 @@ import type {
 } from "discord.js";
 import { buildTrialVotePollEmbed } from "../services/embedBuilders.js";
 import {
+	buildFeedbackModal,
 	createFeedback,
 	parseFeedbackModalCustomId,
 } from "../services/feedbackService.js";
@@ -17,6 +18,11 @@ import {
 import { audit, logger } from "../services/logger.js";
 import { refreshGuildRaidReminderSchedule } from "../services/raidReminderScheduler.js";
 import { findActiveTrial } from "../services/trialService.js";
+import {
+	findActiveTrialById,
+	parseTrialFeedbackButtonCustomId,
+	refreshTrialFeedbackBoardMessage,
+} from "../services/multiTrialFeedbackService.js";
 import {
 	buildTrialVoteButtons,
 	isVoteCustomId,
@@ -204,7 +210,58 @@ async function handleFeedbackModal(
 	await interaction.editReply({
 		content: "Feedback received and saved. Thank you!",
 	});
+
+	if (feedbackContext.boardChannelId && feedbackContext.boardMessageId) {
+		await refreshTrialFeedbackBoardMessage({
+			prisma: listener.container.prisma,
+			client: listener.container.client,
+			guildId: interaction.guildId,
+			channelId: feedbackContext.boardChannelId,
+			messageId: feedbackContext.boardMessageId,
+		});
+	}
 }
+
+async function handleTrialFeedbackButton(
+	interaction: ButtonInteraction,
+	listener: Listener,
+): Promise<boolean> {
+	const context = parseTrialFeedbackButtonCustomId(interaction.customId);
+	if (!context) {
+		return false;
+	}
+
+	if (!interaction.guildId) {
+		await interaction.reply({
+			content: "Guild context is missing.",
+			flags: ["Ephemeral"],
+		});
+		return true;
+	}
+
+	const trial = await findActiveTrialById(
+		listener.container.prisma,
+		interaction.guildId,
+		context.trialId,
+	);
+
+	if (!trial) {
+		await interaction.reply({
+			content: "This trial is no longer active. Please run `/trials-feedback` again.",
+			flags: ["Ephemeral"],
+		});
+		return true;
+	}
+
+	const modal = buildFeedbackModal(trial.userId, trial.displayName, {
+		boardChannelId: interaction.channelId,
+		boardMessageId: interaction.message.id,
+	});
+
+	await interaction.showModal(modal);
+	return true;
+}
+
 async function handleVoteButton(
 	interaction: ButtonInteraction,
 	listener: Listener,
@@ -311,6 +368,11 @@ export class InteractionCreateListener extends Listener {
 
 	public override async run(interaction: Interaction) {
 		if (interaction.isButton()) {
+			const feedbackHandled = await handleTrialFeedbackButton(interaction, this);
+			if (feedbackHandled) {
+				return;
+			}
+
 			const handled = await handleVoteButton(interaction, this);
 			if (handled) {
 				return;

@@ -1,21 +1,52 @@
 import type { Feedback, PrismaClient } from "../generated/prisma/client.js";
+import {
+	CheckboxBuilder,
+	LabelBuilder,
+	ModalBuilder,
+	TextInputBuilder,
+	TextInputStyle,
+} from "discord.js";
 import { createGuildLogger } from "./logger.js";
 
 const FEEDBACK_MODAL_PREFIX = "feedbackModal";
 
-export function buildFeedbackModalCustomId(targetId: string): string {
+export type FeedbackModalContext = {
+	targetId: string;
+	boardChannelId?: string;
+	boardMessageId?: string;
+};
+
+function truncateModalTitle(value: string, maxLength = 45): string {
+	if (value.length <= maxLength) {
+		return value;
+	}
+
+	return `${value.slice(0, maxLength - 3)}...`;
+}
+
+export function buildFeedbackModalCustomId(
+	targetId: string,
+	context?: {
+		boardChannelId?: string;
+		boardMessageId?: string;
+	},
+): string {
+	if (context?.boardChannelId && context.boardMessageId) {
+		return `${FEEDBACK_MODAL_PREFIX}:${targetId}:${context.boardChannelId}:${context.boardMessageId}`;
+	}
+
 	return `${FEEDBACK_MODAL_PREFIX}:${targetId}`;
 }
 
-export function parseFeedbackModalCustomId(customId: string): {
-	targetId: string;
-} | null {
+export function parseFeedbackModalCustomId(
+	customId: string,
+): FeedbackModalContext | null {
 	if (!customId.startsWith(`${FEEDBACK_MODAL_PREFIX}:`)) {
 		return null;
 	}
 
 	const parts = customId.split(":");
-	if (parts.length !== 2) {
+	if (parts.length !== 2 && parts.length !== 4) {
 		return null;
 	}
 
@@ -24,7 +55,86 @@ export function parseFeedbackModalCustomId(customId: string): {
 		return null;
 	}
 
-	return { targetId };
+	if (parts.length === 2) {
+		return { targetId };
+	}
+
+	const boardChannelId = parts[2];
+	const boardMessageId = parts[3];
+	if (!boardChannelId || !boardMessageId) {
+		return null;
+	}
+
+	return { targetId, boardChannelId, boardMessageId };
+}
+
+export function buildFeedbackModal(
+	targetId: string,
+	targetDisplayName: string,
+	context?: {
+		boardChannelId?: string;
+		boardMessageId?: string;
+	},
+): ModalBuilder {
+	const modal = new ModalBuilder()
+		.setCustomId(buildFeedbackModalCustomId(targetId, context))
+		.setTitle(truncateModalTitle(`Feedback for ${targetDisplayName}`));
+
+	const performanceInput = new TextInputBuilder()
+		.setCustomId("performance")
+		.setStyle(TextInputStyle.Short)
+		.setPlaceholder("Rate performance from 1 to 5")
+		.setRequired(true);
+
+	const attitudeInput = new TextInputBuilder()
+		.setCustomId("attitude")
+		.setStyle(TextInputStyle.Short)
+		.setPlaceholder("Rate attitude from 1 to 5")
+		.setRequired(true);
+
+	const focusInput = new TextInputBuilder()
+		.setCustomId("focus")
+		.setStyle(TextInputStyle.Short)
+		.setPlaceholder("Rate focus from 1 to 5")
+		.setRequired(true);
+
+	const lateInput = new CheckboxBuilder().setCustomId("late").setDefault(false);
+
+	const commentsInput = new TextInputBuilder()
+		.setCustomId("comments")
+		.setStyle(TextInputStyle.Paragraph)
+		.setPlaceholder("Additional comments")
+		.setRequired(false);
+
+	const performanceLabel = new LabelBuilder()
+		.setLabel("Performance (1-5)")
+		.setTextInputComponent(performanceInput);
+
+	const attitudeLabel = new LabelBuilder()
+		.setLabel("Attitude (1-5)")
+		.setTextInputComponent(attitudeInput);
+
+	const focusLabel = new LabelBuilder()
+		.setLabel("Focus (1-5)")
+		.setTextInputComponent(focusInput);
+
+	const lateLabel = new LabelBuilder()
+		.setLabel("Was this trial late to raid?")
+		.setCheckboxComponent(lateInput);
+
+	const commentsLabel = new LabelBuilder()
+		.setLabel("Comments")
+		.setTextInputComponent(commentsInput);
+
+	modal.addLabelComponents(
+		performanceLabel,
+		attitudeLabel,
+		focusLabel,
+		lateLabel,
+		commentsLabel,
+	);
+
+	return modal;
 }
 
 type CreateFeedbackInput = {

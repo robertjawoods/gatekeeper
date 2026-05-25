@@ -15,6 +15,9 @@ export default defineConfig({
 		starlight({
 			title: siteConfig.title,
 			description: siteConfig.tagline,
+			components: {
+				Footer: './src/components/Footer.astro',
+			},
 			social: [{ icon: 'github', label: 'GitHub', href: siteConfig.repositoryUrl }],
 			sidebar: [
 				{

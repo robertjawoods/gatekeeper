@@ -57,6 +57,8 @@ export class ListCommand extends Command {
 			activeOnly,
 		});
 
+		console.log("Workflow result:", workflowResult);
+
 		await interaction.editReply({
 			content: workflowResult.content,
 		});

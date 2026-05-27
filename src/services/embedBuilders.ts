@@ -15,6 +15,7 @@ export type TrialListItem = {
 	displayName: string;
 	status: "Active" | "Passed" | "Failed";
 	startTime: Date;
+	projectedCompletion: Date;
 };
 
 export type RoleDebugRoleSnapshot = {
@@ -155,7 +156,7 @@ export function buildTrialListEmbeds(
 			const globalIndex = chunkIndex * MAX_TRIALS_PER_EMBED + itemIndex + 1;
 			embed.addFields({
 				name: `${globalIndex}. ${item.displayName}`,
-				value: `Status: **${item.status}**\nStarted: ${formatDiscordTimestamp(item.startTime)}`,
+				value: `Status: **${item.status}**\nStarted: ${formatDiscordTimestamp(item.startTime)}\nProjected Completion: ${formatDiscordTimestamp(item.projectedCompletion)}`,
 				inline: false,
 			});
 		});

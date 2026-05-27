@@ -687,10 +687,16 @@ export async function postTrialListWorkflow(input: {
 						trial.userId,
 						trial.userId,
 					));
+				const projectedEndDate = projectTrialExpectedEndDate(
+					trial.startTime,
+					settingsResult.settings.raidScheduleCron,
+					settingsResult.settings.raidAttendanceReminderThreshold,
+				);
 				return {
 					displayName,
 					status,
 					startTime: trial.startTime,
+					projectedCompletion: projectedEndDate,
 				};
 			}),
 		);

@@ -12,8 +12,9 @@ description: How to collect high-signal feedback for fair decisions.
 ## Suggested cadence
 
 1. Submit feedback after each relevant raid.
-2. Use `/summary` to detect trend direction, not one-off outliers.
-3. Trigger `/vote` once observations are sufficient.
+2. If several trials are active, run `/trials-feedback` to post one-click feedback targets in the officer channel.
+3. Use `/summary` to detect trend direction, not one-off outliers.
+4. Trigger `/vote` once observations are sufficient.
 
 ## Quality tips
 

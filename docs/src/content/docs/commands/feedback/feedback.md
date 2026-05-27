@@ -58,5 +58,6 @@ description: Open feedback modal and submit structured trial observations.
 
 ## Related
 
-- [`/feedbacksummary`](/commands/feedback/summary/)
+- [`/trials-feedback`](/commands/feedback/trials-feedback/)
+- [`/summary`](/commands/feedback/summary/)
 - [`/vote`](/commands/trial-lifecycle/vote/)

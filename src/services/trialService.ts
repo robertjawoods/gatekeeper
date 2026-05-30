@@ -18,6 +18,44 @@ import {
 import { audit, createGuildLogger } from "./logger.js";
 import { finalizeTrialVotePollArtifacts } from "./voteService.js";
 
+const DISCORD_UNKNOWN_MEMBER_ERROR_CODE = 10007;
+
+function asObjectRecord(value: unknown): Record<string, unknown> | null {
+	if (!value || typeof value !== "object") {
+		return null;
+	}
+
+	return value as Record<string, unknown>;
+}
+
+function asErrorCode(value: unknown): number | null {
+	if (typeof value !== "number") {
+		return null;
+	}
+
+	return Number.isFinite(value) ? value : null;
+}
+
+function isUnknownMemberError(error: unknown): boolean {
+	const root = asObjectRecord(error);
+	if (!root) {
+		return false;
+	}
+
+	const directCode = asErrorCode(root.code);
+	if (directCode === DISCORD_UNKNOWN_MEMBER_ERROR_CODE) {
+		return true;
+	}
+
+	const rawError = asObjectRecord(root.rawError);
+	if (!rawError) {
+		return false;
+	}
+
+	const rawCode = asErrorCode(rawError.code);
+	return rawCode === DISCORD_UNKNOWN_MEMBER_ERROR_CODE;
+}
+
 export async function findActiveTrial(
 	prisma: PrismaClient,
 	guildId: string,
@@ -624,6 +662,10 @@ export type ListTrialsWorkflowResult = {
 	content: string;
 };
 
+export type PruneTrialsWorkflowResult = {
+	content: string;
+};
+
 export async function postTrialListWorkflow(input: {
 	prisma: PrismaClient;
 	client: SapphireClient;
@@ -718,4 +760,147 @@ export async function postTrialListWorkflow(input: {
 				"An error occurred while retrieving trials. Please try again later.",
 		};
 	}
+}
+
+export async function pruneTrialsWorkflow(input: {
+	prisma: PrismaClient;
+	client: SapphireClient;
+	guild: Guild;
+	guildId: string;
+	actor: { id: string; username: string };
+	dryRun?: boolean;
+}): Promise<PruneTrialsWorkflowResult> {
+	const log = createGuildLogger(input.guildId);
+	const settingsResult = await loadGuildSettings(input.prisma, input.guildId);
+	if (!settingsResult.ok) {
+		if (settingsResult.reason === "error") {
+			log.error(
+				{ err: settingsResult.error },
+				"Error retrieving guild settings.",
+			);
+		}
+		return { content: settingsResult.userMessage };
+	}
+
+	const activeTrials = await listTrials(input.prisma, input.guildId, true);
+	if (activeTrials.length === 0) {
+		return { content: "No active trials to prune in this server." };
+	}
+
+	let pruned = 0;
+	let unchanged = 0;
+	let errors = 0;
+
+	for (const trial of activeTrials) {
+		try {
+			await input.guild.members.fetch(trial.userId);
+			unchanged += 1;
+			continue;
+		} catch (error) {
+			if (!isUnknownMemberError(error)) {
+				errors += 1;
+				log.error(
+					{ userId: trial.userId, trialId: trial.id, err: error },
+					"Error checking guild membership during prune.",
+				);
+				continue;
+			}
+		}
+
+		if (input.dryRun) {
+			pruned += 1;
+			log.info(
+				{ userId: trial.userId, trialId: trial.id },
+				"[Dry run] Would prune missing guild member from active trial.",
+			);
+		} else {
+			try {
+				const result = await resolveTrial(
+					input.prisma,
+					input.guildId,
+					trial.userId,
+					false,
+				);
+
+				if (!result.updated) {
+					unchanged += 1;
+					continue;
+				}
+
+				audit(input.guildId, "trial.failed", input.actor.id, {
+					targetId: trial.userId,
+					trialId: result.trialId,
+					reason: "prune_missing_member",
+				});
+
+				if (result.trialId) {
+					try {
+						await finalizeTrialVotePollArtifacts({
+							prisma: input.prisma,
+							client: input.client,
+							guildId: input.guildId,
+							trialId: result.trialId,
+							officerChannelId: settingsResult.settings.officerChannelId,
+							outcome: "failed",
+						});
+					} catch (error) {
+						log.error(
+							{ err: error, trialId: result.trialId },
+							"Unexpected error while finalizing vote poll artifacts during prune.",
+						);
+					}
+				}
+
+				pruned += 1;
+				log.info(
+					{ userId: trial.userId, trialId: result.trialId },
+					"Pruned missing guild member from active trial.",
+				);
+			} catch (error) {
+				errors += 1;
+				log.error(
+					{ userId: trial.userId, trialId: trial.id, err: error },
+					"Error resolving active trial during prune.",
+				);
+			}
+		}
+	}
+
+	const summaryLines = [
+		input.dryRun ? "**Trial prune summary (dry run — no changes made)**" : "**Trial prune summary**",
+		`Scanned: ${activeTrials.length}`,
+		input.dryRun ? `Would prune (marked failed): ${pruned}` : `Pruned (marked failed): ${pruned}`,
+		`Unchanged: ${unchanged}`,
+		`Errors: ${errors}`,
+	];
+
+	const sendResult = await sendOfficerChannelMessage(
+		input.client,
+		settingsResult.settings.officerChannelId,
+		{
+			content: summaryLines.join("\n"),
+		},
+	);
+
+	if (!sendResult.delivered) {
+		return {
+			content:
+				`${input.dryRun ? "Dry run completed" : "Prune completed"}. Scanned ${activeTrials.length}, pruned ${pruned}, unchanged ${unchanged}, errors ${errors}. ` +
+				"I could not send the summary to the officer channel. Please check channel settings and permissions.",
+		};
+	}
+
+	if (errors > 0) {
+		return {
+			content:
+				`${input.dryRun ? "Dry run completed" : "Prune completed"} with warnings. Scanned ${activeTrials.length}, pruned ${pruned}, unchanged ${unchanged}, errors ${errors}. ` +
+				"Posted summary in the officer channel.",
+		};
+	}
+
+	return {
+		content:
+			`${input.dryRun ? "Dry run completed" : "Prune completed"}. Scanned ${activeTrials.length}, pruned ${pruned}, unchanged ${unchanged}, errors ${errors}. ` +
+			"Posted summary in the officer channel.",
+	};
 }

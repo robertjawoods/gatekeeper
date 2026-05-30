@@ -13,6 +13,7 @@
 		"docs:check": "pnpm --dir docs astro check",
 		"deploy-commands": "tsx --env-file .env.local scripts/deploy-commands.ts",
 		"clear-global-commands": "tsx --env-file .env.local scripts/clear-global-commands.ts",
+		"clear-guild-commands": "tsx --env-file .env.local scripts/clear-guild-commands.ts",
 		"ops:backfill-raid-attendance-date": "pnpm deploy-commands && tsx --env-file .env.local scripts/backfill-raid-attendance-date.ts",
 		"ops:backfill-trial-display-names": "tsx --env-file .env.local scripts/backfill-trial-display-names.ts",
 		"prisma:generate": "prisma generate",

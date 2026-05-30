@@ -41,6 +41,7 @@ If you host or operate Gatekeeper yourself, these are the main commands:
 - `pnpm docs:build` - Build docs for production.
 - `pnpm deploy-commands` - Deploy Discord application commands.
 - `pnpm clear-global-commands` - Remove globally deployed commands.
+- `pnpm clear-guild-commands -- <guildId>` - Remove commands from a specific guild.
 
 ## Support
 

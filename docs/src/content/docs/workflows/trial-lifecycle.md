@@ -11,9 +11,11 @@ description: Recommended sequence for running trial decisions.
 4. Review progress with `/summary member:@member`.
 5. Open decision poll with `/vote target:@member`.
 6. Resolve with `/pass` or `/fail`.
+7. Run `/prune` to clean up active trials for members who have left the guild.
 
 ## Operating notes
 
 - Keep all actions in the same guild where trial started.
 - Use `/list` regularly to monitor active queue.
+- Use `/prune` when roster changes happen or before review meetings.
 - Require at least several feedback entries before voting.
